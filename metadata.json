@@ -1,0 +1,10 @@
+{
+  "uuid": "netpulse@ammarqaisar11a55.github.io",
+  "name": "NetPulse",
+  "description": "Real-time internet speed and usage monitoring for GNOME.\n\nShows live download and upload speed in the top panel, and tracks session, daily, weekly and monthly data usage. All data stays on your computer.",
+  "shell-version": ["50"],
+  "url": "https://github.com/ammarqaisar11a55/NetPulse-GNOME-Shell-Extension",
+  "settings-schema": "org.gnome.shell.extensions.netpulse",
+  "gettext-domain": "netpulse",
+  "version-name": "0.1.0"
+}

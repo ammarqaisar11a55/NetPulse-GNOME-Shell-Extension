@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="netpulse">
+  <schema id="org.gnome.shell.extensions.netpulse"
+          path="/org/gnome/shell/extensions/netpulse/">
+    <key name="debug-logging" type="b">
+      <default>false</default>
+      <summary>Enable debug logging</summary>
+      <description>Write verbose diagnostic messages to the system journal.</description>
+    </key>
+  </schema>
+</schemalist>
