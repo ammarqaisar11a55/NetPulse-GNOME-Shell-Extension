@@ -191,6 +191,25 @@ export class UsageTracker extends EventEmitter {
         return hourlySeries(this._data, this._clock());
     }
 
+    /** @returns {object} bookkeeping of announced data limit alerts */
+    get alertState() {
+        return this._data.alerts;
+    }
+
+    /**
+     * Stores alert bookkeeping and saves at once when it changed, so an
+     * alert is never repeated, even after a crash.
+     *
+     * @param {object} state - new bookkeeping
+     */
+    setAlertState(state) {
+        if (JSON.stringify(state) === JSON.stringify(this._data.alerts))
+            return;
+        this._data.alerts = state;
+        this._dirty = true;
+        this.save();
+    }
+
     /** @param {number} weekStart - first day of the week (0 = Sunday) */
     setWeekStart(weekStart) {
         this._weekStart = weekStart;

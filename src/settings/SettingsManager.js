@@ -12,6 +12,7 @@ const GROUPS = {
     usage: ['usage-tracking', 'usage-retention-days'],
     reset: ['usage-reset-request'],
     network: ['manual-interface'],
+    alerts: ['usage-notifications', 'daily-limit', 'monthly-limit', 'alert-percent'],
     debug: ['debug-logging'],
 };
 
@@ -86,6 +87,25 @@ export class SettingsManager extends EventEmitter {
     /** @returns {string|null} interface chosen by the user, or null for automatic */
     get manualInterface() {
         return this._settings.get_string('manual-interface').trim() || null;
+    }
+
+    /**
+     * @returns {{enabled: boolean, daily: number, monthly: number, percent: number}}
+     *   data limit alerts; limits in bytes, 0 for none
+     */
+    get alerts() {
+        const s = this._settings;
+        return {
+            enabled: s.get_boolean('usage-notifications'),
+            daily: s.get_double('daily-limit') * 1e9,
+            monthly: s.get_double('monthly-limit') * 1e9,
+            percent: s.get_uint('alert-percent'),
+        };
+    }
+
+    /** @returns {boolean} whether to notify about connection changes */
+    get connectionNotifications() {
+        return this._settings.get_boolean('connection-notifications');
     }
 
     /** @returns {boolean} */

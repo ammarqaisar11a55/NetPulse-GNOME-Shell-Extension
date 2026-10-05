@@ -13,6 +13,9 @@ import {UsageTracker, readBootId} from './src/usage/UsageTracker.js';
 import {UsageStorage} from './src/usage/UsageStorage.js';
 import {PanelIndicator} from './src/ui/PanelIndicator.js';
 import {PopupDashboard} from './src/ui/PopupDashboard.js';
+import {Notifier} from './src/notifications/Notifier.js';
+import {UsageAlertNotifier} from './src/notifications/UsageAlertNotifier.js';
+import {ConnectionNotifier} from './src/notifications/ConnectionNotifier.js';
 
 // Index within the chosen panel box; -1 appends.
 const PANEL_SLOTS = {left: -1, center: -1, right: 0};
@@ -39,6 +42,18 @@ export default class NetPulseExtension extends Extension {
         });
         this._settings.connect('reset',
             () => this._usageTracker.applyResetRequest(this._settings.resetRequest));
+
+        this._notifier = new Notifier();
+        this._usageAlerts = new UsageAlertNotifier({
+            usageTracker: this._usageTracker,
+            settings: this._settings,
+            notifier: this._notifier,
+        });
+        this._connectionNotifier = new ConnectionNotifier({
+            interfaceMonitor: this._interfaceMonitor,
+            settings: this._settings,
+            notifier: this._notifier,
+        });
 
         this._createIndicator();
         this._settings.connect('display', () => this._indicator.setOptions(this._settings.display));
@@ -67,6 +82,10 @@ export default class NetPulseExtension extends Extension {
     disable() {
         global.disconnectObject(this);
         this._stopMonitoring();
+        this._usageAlerts?.destroy();
+        this._usageAlerts = null;
+        this._notifier?.destroy();
+        this._notifier = null;
         this._destroyIndicator();
         this._usageTracker?.destroy();
         this._usageTracker = null;
@@ -98,6 +117,8 @@ export default class NetPulseExtension extends Extension {
     }
 
     _stopMonitoring() {
+        this._connectionNotifier?.destroy();
+        this._connectionNotifier = null;
         this._interfaceMonitor?.destroy();
         this._interfaceMonitor = null;
         this._speedMonitor?.destroy();

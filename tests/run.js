@@ -10,6 +10,7 @@ import './unit/formatters.test.js';
 import './unit/speedMonitor.test.js';
 import './unit/panelText.test.js';
 import './unit/usage.test.js';
+import './unit/usageAlerts.test.js';
 
 const loop = new GLib.MainLoop(null, false);
 let ok = false;

@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # The preferences window opens, and changes made in it reach the running
-# extension. Positions are relative to the window (640x720 default size).
+# extension. Positions are relative to the window (760x720 default size).
 
 prefs_get() { gsettings --schemadir "$EXT_DIR/schemas" get org.gnome.shell.extensions.netpulse "$1"; }
 at() { click $((wx + $1)) $((wy + $2)); }
@@ -22,34 +22,36 @@ at 100 23   # focus the window; the first click only activates it
 screenshot prefs-display
 
 # Display page: Show Units.
-at 549 302
+at 609 302
 expect_eq "Show Units switch updates the setting" "$(prefs_get show-units)" false
 expect_eq "panel follows the switch" "$(np_eval 'ext._indicator.text')" '"↓ 4.82  ↑ 1.21"'
-at 549 302
+at 609 302
 expect_eq "switching back restores units" "$(prefs_get show-units)" true
 
 # Network page: turning off automatic detection picks an interface.
-at 435 23
+at 450 23
+screenshot prefs-notifications
+at 588 23
 screenshot prefs-network
-at 548 137
+at 608 137
 expect_true "turning off auto-detection selects an interface" test "$(prefs_get manual-interface)" != "''"
 expect_eq "extension monitors the chosen interface" "$(np_eval 'ext._interfaceMonitor.info.source')" '"manual"'
-at 548 137
+at 608 137
 expect_eq "turning auto-detection back on clears the choice" "$(prefs_get manual-interface)" "''"
 
 # Usage page: reset statistics, with confirmation.
-at 317 23
+at 312 23
 screenshot prefs-usage
 request_before="$(prefs_get usage-reset-request)"
-at 319 377
+at 379 377
 sleep 0.5
 screenshot prefs-reset-dialog
-at 235 411  # Cancel
+at 295 411  # Cancel
 expect_eq "cancelling sends no reset request" "$(prefs_get usage-reset-request)" "$request_before"
 expect_true "statistics are still there" test "$(np_eval 'ext._usageTracker.totals.today.rx')" -ge 7000000000
-at 319 377
+at 379 377
 sleep 0.5
-at 403 411  # Reset
+at 463 411  # Reset
 expect_true "confirming sends a reset request" test "$(prefs_get usage-reset-request)" != "$request_before"
 expect_true "the extension erases statistics" test "$(np_eval 'ext._usageTracker.totals.today.rx')" -lt 7000000000
 

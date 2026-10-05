@@ -82,6 +82,36 @@
       <description>Set by the preferences dialog to the current time (in seconds since the epoch) to ask the extension to erase all usage statistics.</description>
     </key>
 
+    <!-- Notifications -->
+    <key name="usage-notifications" type="b">
+      <default>true</default>
+      <summary>Data limit alerts</summary>
+      <description>Notify when usage reaches the alert percentage of a data limit, and when the limit is reached.</description>
+    </key>
+    <key name="daily-limit" type="d">
+      <range min="0" max="100000"/>
+      <default>0</default>
+      <summary>Daily data limit (GB)</summary>
+      <description>Daily data limit in gigabytes (1 GB = 1000³ bytes). 0 disables daily alerts.</description>
+    </key>
+    <key name="monthly-limit" type="d">
+      <range min="0" max="1000000"/>
+      <default>0</default>
+      <summary>Monthly data limit (GB)</summary>
+      <description>Monthly data limit in gigabytes (1 GB = 1000³ bytes). 0 disables monthly alerts.</description>
+    </key>
+    <key name="alert-percent" type="u">
+      <range min="1" max="99"/>
+      <default>80</default>
+      <summary>Alert percentage</summary>
+      <description>Percentage of a limit at which to warn, before the limit itself is reached.</description>
+    </key>
+    <key name="connection-notifications" type="b">
+      <default>false</default>
+      <summary>Connection notifications</summary>
+      <description>Notify when the network connection is lost, restored or switched, and when a VPN turns on or off.</description>
+    </key>
+
     <!-- Network -->
     <key name="manual-interface" type="s">
       <default>''</default>

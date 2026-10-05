@@ -69,10 +69,13 @@ cp "$WORK/session.log" "$OUTPUT/session.log"
 echo "--- NetPulse log lines ---"
 grep -F "[NetPulse]" "$LOG" || true
 echo "--- JS errors ---"
-# Inside the namespace the shell runs as (mapped) root, which logind does
-# not know about; that complaint is expected there.
-NOISE='^$'
-[[ -n "${NETPULSE_IN_NETNS:-}" ]] && NOISE='Could not get a proxy for user 0'
+# Known messages from GNOME Shell itself, unrelated to NetPulse:
+# - its power toggle (status/system.js) can receive a UPower update after
+#   being disposed while the shell shuts down;
+# - inside the namespace the shell runs as (mapped) root, which logind does
+#   not know about.
+NOISE='Gjs_status_system_PowerToggle .* has been already disposed'
+[[ -n "${NETPULSE_IN_NETNS:-}" ]] && NOISE="$NOISE|Could not get a proxy for user 0"
 if grep -E "JS ERROR|JS WARNING|-ERROR \*\*|-CRITICAL \*\*|Error.*$UUID|Extension $UUID" "$LOG" | grep -vE "$NOISE"; then
     exit 1
 fi
