@@ -2,6 +2,11 @@
 
 > Real-time internet speed and usage monitoring for GNOME.
 
+[![CI](https://github.com/ammarqaisar11a55/NetPulse-GNOME-Shell-Extension/actions/workflows/ci.yml/badge.svg)](https://github.com/ammarqaisar11a55/NetPulse-GNOME-Shell-Extension/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/ammarqaisar11a55/NetPulse-GNOME-Shell-Extension)](https://github.com/ammarqaisar11a55/NetPulse-GNOME-Shell-Extension/releases/latest)
+![GNOME Shell 50](https://img.shields.io/badge/GNOME%20Shell-50-4a86cf)
+[![License: GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)](LICENSE)
+
 NetPulse is a GNOME Shell extension that shows your current download and
 upload speed in the top bar and keeps track of how much data you use: per
 session, day, week and month, with history charts and optional data limit
@@ -294,6 +299,18 @@ machine:
 ```bash
 gjs -m tests/live/probe-network.js 60   # what is detected, and changes
 gjs -m tests/live/probe-speed.js 30     # live speeds
+```
+
+### Releases
+
+Pushing a version tag publishes a release through GitHub Actions
+(`.github/workflows/release.yml`): it checks that the tag matches
+`version-name` in `metadata.json`, runs the tests, builds the bundle and a
+`SHA256SUMS` file, and takes the release notes from `CHANGELOG.md`.
+
+```bash
+git tag -a v1.0.0 -m "NetPulse 1.0.0"
+git push origin v1.0.0
 ```
 
 ### Other tools
