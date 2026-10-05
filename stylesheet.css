@@ -1,0 +1,52 @@
+/* NetPulse
+ *
+ * Colors are inherited from the shell theme wherever possible so the
+ * extension follows the user's light/dark style and accent color.
+ */
+
+/* ---- Panel indicator ---------------------------------------------------- */
+
+.netpulse-panel-box {
+  spacing: 0.75em;
+}
+
+.netpulse-speed {
+  spacing: 0.25em;
+}
+
+.netpulse-value {
+  /* Equal-width digits; together with reserved widths the panel stays put. */
+  font-feature-settings: "tnum";
+  text-align: right;
+}
+
+.netpulse-arrow {
+  font-weight: normal;
+}
+
+.netpulse-unit {
+  font-weight: normal;
+}
+
+/* Compact: "↓4.82M ↑1.21K" */
+.netpulse-style-compact {
+  spacing: 0.5em;
+}
+
+.netpulse-style-compact .netpulse-speed {
+  spacing: 0.1em;
+}
+
+.netpulse-style-compact .netpulse-unit {
+  font-weight: bold;
+}
+
+/* Stacked: download above upload, in a smaller font to fit the panel. */
+.netpulse-style-stacked {
+  spacing: 0;
+}
+
+.netpulse-style-stacked .netpulse-speed {
+  font-size: 0.72em;
+  spacing: 0.25em;
+}

@@ -1,13 +1,63 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="netpulse">
+  <enum id="org.gnome.shell.extensions.netpulse.PanelContent">
+    <value nick="both" value="0"/>
+    <value nick="download" value="1"/>
+    <value nick="upload" value="2"/>
+    <value nick="combined" value="3"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.netpulse.PanelStyle">
+    <value nick="detailed" value="0"/>
+    <value nick="compact" value="1"/>
+    <value nick="stacked" value="2"/>
+  </enum>
+  <enum id="org.gnome.shell.extensions.netpulse.PanelPosition">
+    <value nick="left" value="0"/>
+    <value nick="center" value="1"/>
+    <value nick="right" value="2"/>
+  </enum>
+
   <schema id="org.gnome.shell.extensions.netpulse"
           path="/org/gnome/shell/extensions/netpulse/">
+    <!-- Display -->
+    <key name="panel-content" enum="org.gnome.shell.extensions.netpulse.PanelContent">
+      <default>'both'</default>
+      <summary>Panel content</summary>
+      <description>Which speeds the panel indicator shows: download and upload, only one of them, or their sum.</description>
+    </key>
+    <key name="panel-style" enum="org.gnome.shell.extensions.netpulse.PanelStyle">
+      <default>'detailed'</default>
+      <summary>Panel style</summary>
+      <description>Detailed shows full units, compact uses one-letter units, stacked shows download above upload.</description>
+    </key>
+    <key name="panel-position" enum="org.gnome.shell.extensions.netpulse.PanelPosition">
+      <default>'right'</default>
+      <summary>Panel position</summary>
+      <description>Where in the top panel the indicator is placed.</description>
+    </key>
+    <key name="show-units" type="b">
+      <default>true</default>
+      <summary>Show units</summary>
+      <description>Show the unit next to each speed in the panel.</description>
+    </key>
+    <key name="use-bits" type="b">
+      <default>false</default>
+      <summary>Show speeds in bits</summary>
+      <description>Show speeds in bits per second (Mbps) instead of bytes per second (MB/s).</description>
+    </key>
+    <key name="binary-units" type="b">
+      <default>false</default>
+      <summary>Use binary units</summary>
+      <description>Use 1024-based units (KiB, MiB, GiB) instead of 1000-based units (KB, MB, GB).</description>
+    </key>
     <key name="refresh-interval" type="d">
       <range min="0.5" max="10.0"/>
       <default>1.0</default>
       <summary>Refresh interval</summary>
       <description>How often, in seconds, network speed is sampled.</description>
     </key>
+
+    <!-- Diagnostics -->
     <key name="debug-logging" type="b">
       <default>false</default>
       <summary>Enable debug logging</summary>

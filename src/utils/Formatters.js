@@ -88,6 +88,24 @@ export function formatSpeed(bytesPerSecond, options) {
 }
 
 /**
+ * Every unit speedParts() can produce for the given options; used to reserve
+ * a stable width in the panel.
+ *
+ * @param {UnitOptions} [options] - unit options
+ * @returns {{units: string[], shorts: string[]}} full and short units
+ */
+export function speedUnitCandidates({bits = false, binary = false} = {}) {
+    if (bits)
+        return {units: [...BITS], shorts: ['b', ...SHORT.slice(1)]};
+    const units = binary ? BINARY_BYTES : DECIMAL_BYTES;
+    return {units: units.map(u => `${u}/s`), shorts: [...SHORT]};
+}
+
+// The widest numbers scale() can produce: three digits with or without a
+// decimal point.
+export const VALUE_WIDTH_TEMPLATES = ['8.88', '88.8', '888'];
+
+/**
  * @param {number} bytes - amount of data
  * @param {UnitOptions} [options] - unit options (`bits` is ignored)
  * @returns {{value: string, unit: string}} parts

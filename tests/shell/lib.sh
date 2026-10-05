@@ -62,6 +62,18 @@ screenshot() {
         echo "  saved $OUTPUT/$1.png"
 }
 
+# Saves a screenshot of a region (default: the top bar) to $OUTPUT/<name>.png
+# Usage: screenshot_area <name> [x y width height]
+screenshot_area() {
+    mkdir -p "$OUTPUT"
+    local x="${2:-0}" y="${3:-0}" w="${4:-1280}" h="${5:-$(shell_eval 'Main.panel.height')}"
+    gdbus call --session --dest org.gnome.Shell.Screenshot \
+        --object-path /org/gnome/Shell/Screenshot \
+        --method org.gnome.Shell.Screenshot.ScreenshotArea \
+        "$x" "$y" "$w" "$h" false "$OUTPUT/$1.png" >/dev/null &&
+        echo "  saved $OUTPUT/$1.png"
+}
+
 # Changes a NetPulse setting: np_set <key> <gvariant-value>
 np_set() {
     gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.netpulse "$1" "$2"

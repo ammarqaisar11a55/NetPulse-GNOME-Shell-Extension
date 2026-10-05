@@ -28,6 +28,10 @@ for scenario in "$@"; do
     echo "--- scenario: $(basename "$scenario" .sh)"
     # shellcheck disable=SC1090
     source "$scenario"
+    if ! kill -0 "$SHELL_PID" 2>/dev/null; then
+        fail "gnome-shell exited during $(basename "$scenario")"
+        exit "$FAILURES"
+    fi
 done
 
 kill "$SHELL_PID"

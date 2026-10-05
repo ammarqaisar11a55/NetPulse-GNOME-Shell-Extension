@@ -8,6 +8,7 @@ import {run} from './harness.js';
 import './unit/kernelBackend.test.js';
 import './unit/formatters.test.js';
 import './unit/speedMonitor.test.js';
+import './unit/panelText.test.js';
 
 const loop = new GLib.MainLoop(null, false);
 let ok = false;

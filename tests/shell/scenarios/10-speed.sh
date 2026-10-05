@@ -5,11 +5,12 @@ expect_true "an interface is detected" wait_for true 'ext._interfaceMonitor.info
 iface="$(np_eval 'ext._interfaceMonitor.info.name')"
 expect_eq "speed monitor follows the detected interface" "$(np_eval 'ext._speedMonitor.iface')" "$iface"
 
+# Whole-second timers are batched by GLib, so ticks may drift by up to a
+# second; measure over a window long enough to absorb that.
 samples_before="$(np_eval 'ext._speedMonitor.history.length')"
-sleep 2.2
-samples_after="$(np_eval 'ext._speedMonitor.history.length')"
-expect_true "samples arrive about once per second" \
-    test $((samples_after - samples_before)) -ge 2 -a $((samples_after - samples_before)) -le 3
+sleep 5
+samples=$(($(np_eval 'ext._speedMonitor.history.length') - samples_before))
+expect_true "samples arrive about once per second ($samples in 5 s)" test "$samples" -ge 4 -a "$samples" -le 6
 
 np_set refresh-interval 0.5
 sleep 0.2

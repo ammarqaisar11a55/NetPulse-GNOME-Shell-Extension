@@ -47,7 +47,7 @@ dbus-run-session -- bash "$ROOT/tests/shell/session.sh" "${SCENARIOS[@]}" \
 echo "--- NetPulse log lines ---"
 grep -F "[NetPulse]" "$LOG" || true
 echo "--- JS errors ---"
-if grep -E "JS ERROR|JS WARNING|Error.*$UUID|Extension $UUID" "$LOG"; then
+if grep -E "JS ERROR|JS WARNING|-ERROR \*\*|-CRITICAL \*\*|Error.*$UUID|Extension $UUID" "$LOG"; then
     exit 1
 fi
 echo "none"
