@@ -35,6 +35,10 @@ export const HistoryGraph = GObject.registerClass({
      * @param {string} mode - one of ChartMode
      */
     setData(values, mode) {
+        const key = `${mode}:${values.map(v => `${v.a},${v.b}`).join(';')}`;
+        if (key === this._dataKey)
+            return;
+        this._dataKey = key;
         this._values = values;
         this._mode = mode;
         this._max = Math.max(0, ...values.map(v => mode === ChartMode.AREA

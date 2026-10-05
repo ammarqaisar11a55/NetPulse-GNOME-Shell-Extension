@@ -141,7 +141,9 @@ export default class NetPulseExtension extends Extension {
         if (this._interfaceMonitor)
             this._indicator.setOnline(isOnline(this._interfaceMonitor.info));
 
-        if (this._speedMonitor && this._interfaceMonitor) {
+        this._indicator.setMenuBuilder(() => {
+            if (!this._speedMonitor || !this._interfaceMonitor)
+                return;
             this._dashboard = new PopupDashboard(this._indicator.menu, {
                 speedMonitor: this._speedMonitor,
                 interfaceMonitor: this._interfaceMonitor,
@@ -149,7 +151,7 @@ export default class NetPulseExtension extends Extension {
                 settings: this._settings,
                 openPreferences: () => this.openPreferences(),
             });
-        }
+        });
 
         const position = this._settings.panelPosition;
         Main.panel.addToStatusArea(this.uuid, this._indicator, PANEL_SLOTS[position], position);

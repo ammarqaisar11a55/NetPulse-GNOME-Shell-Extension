@@ -10,7 +10,8 @@ tile() { np_eval "$dash._speedDisplay.$1.text"; }
 row() { np_eval "$dash._$1Rows.$2.value"; }
 usage() { np_eval "$dash._usageDisplay.row('$1').join(' / ')"; }
 
-np_eval "($dash._usageTracker.resetSession(), true)" >/dev/null
+np_eval '(ext._usageTracker.resetSession(), true)' >/dev/null
+expect_eq "popup content is not built before first use" "$(np_eval 'ext._dashboard ?? null')" null
 np_eval 'ext._indicator.menu.open(false)' >/dev/null
 sleep 0.3
 expect_eq "popup opens" "$(np_eval 'ext._indicator.menu.isOpen')" true

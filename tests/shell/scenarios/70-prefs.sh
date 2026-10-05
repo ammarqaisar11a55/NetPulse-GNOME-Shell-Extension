@@ -69,6 +69,7 @@ close_prefs() {
 }
 close_prefs
 expect_eq "preferences window closes" "$(window_rect NetPulse)" ""
+np_eval 'ext._indicator.menu.open(false)' >/dev/null
 np_eval "(ext._dashboard._settingsButton.emit('clicked', 1), true)" >/dev/null
 expect_true "popup settings button opens the preferences" wait_window NetPulse
 close_prefs

@@ -9,6 +9,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {panelSegments} from './PanelText.js';
+import {setText} from './Widgets.js';
 import {speedUnitCandidates, VALUE_WIDTH_TEMPLATES} from '../utils/Formatters.js';
 
 const OFFLINE_OPACITY = 128;
@@ -50,9 +51,9 @@ class SpeedItem extends St.BoxLayout {
 
     /** @param {import('./PanelText.js').PanelSegment} segment - what to show */
     update(segment) {
-        this._arrow.text = segment.arrow;
-        this._value.text = segment.value;
-        this._unit.text = segment.unit;
+        setText(this._arrow, segment.arrow);
+        setText(this._value, segment.value);
+        setText(this._unit, segment.unit);
         this._unit.visible = segment.unit !== '';
     }
 
@@ -154,6 +155,25 @@ class PanelIndicator extends PanelMenu.Button {
             candidates = this._options.style === 'compact' ? shorts : units;
         for (const item of this._items)
             item.reserveWidths(candidates);
+    }
+
+    /**
+     * Builds the popup content just before the menu first opens, so the
+     * indicator stays light while the popup is never used, for example
+     * across the disable/enable cycles of every screen lock.
+     *
+     * @param {Function} build - adds the menu content
+     */
+    setMenuBuilder(build) {
+        const open = this.menu.open.bind(this.menu);
+        this.menu.open = animate => {
+            if (build) {
+                const pending = build;
+                build = null;
+                pending();
+            }
+            open(animate);
+        };
     }
 
     /** @returns {string} the text currently shown, for tests */

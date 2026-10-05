@@ -7,7 +7,7 @@ import St from 'gi://St';
 
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {label, DIM_OPACITY} from './Widgets.js';
+import {label, setText, DIM_OPACITY} from './Widgets.js';
 import {ARROWS} from './PanelText.js';
 import {formatBytes} from '../utils/Formatters.js';
 
@@ -62,10 +62,7 @@ class UsageDisplay extends St.Widget {
         for (const period of PERIODS) {
             const {rx, tx} = totals[period];
             const texts = [rx, tx, rx + tx].map(n => formatBytes(n, options));
-            this._cells[period].forEach((cell, i) => {
-                if (cell.text !== texts[i])
-                    cell.text = texts[i];
-            });
+            this._cells[period].forEach((cell, i) => setText(cell, texts[i]));
         }
     }
 

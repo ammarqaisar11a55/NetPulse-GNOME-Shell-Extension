@@ -10,7 +10,7 @@ import St from 'gi://St';
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import {HistoryGraph, ChartMode} from './HistoryGraph.js';
-import {label, DIM_OPACITY} from './Widgets.js';
+import {label, setText, DIM_OPACITY} from './Widgets.js';
 import {ARROWS} from './PanelText.js';
 import {formatBytes, formatSpeed} from '../utils/Formatters.js';
 
@@ -90,7 +90,7 @@ class HistoryView extends St.BoxLayout {
 
         this._model = range === 'live' ? this._liveModel() : this._usageModel(range);
         this._graph.setData(this._model.values, this._model.mode);
-        this._scaleLabel.text = this._model.format(this._graph.max);
+        setText(this._scaleLabel, this._model.format(this._graph.max));
         this._setAxis(this._model.axis, this._model.axisAlign);
         this._updateSummary();
     }
@@ -171,6 +171,11 @@ class HistoryView extends St.BoxLayout {
     }
 
     _setAxis(texts, align) {
+        // Rebuild only when the labels change, not on every data update.
+        const key = JSON.stringify([texts, align]);
+        if (key === this._axisKey)
+            return;
+        this._axisKey = key;
         this._axis.destroy_all_children();
         texts.forEach((text, i) => {
             // Without an explicit alignment, labels mark the two edges.
@@ -190,9 +195,9 @@ class HistoryView extends St.BoxLayout {
         if (!this._model)
             return;
         const hover = this._graph.hover;
-        this._summary.text = hover >= 0 && hover < this._model.values.length
+        setText(this._summary, hover >= 0 && hover < this._model.values.length
             ? this._model.hoverSummary(hover)
-            : this._model.summary;
+            : this._model.summary);
     }
 
     /** @returns {string[]} axis labels, for tests */

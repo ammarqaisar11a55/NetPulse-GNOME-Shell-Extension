@@ -27,6 +27,11 @@ export class EventEmitter {
         this.#handlers.clear();
     }
 
+    /** @returns {number} connected handlers (for leak checks) */
+    get handlerCount() {
+        return this.#handlers.size;
+    }
+
     /**
      * @param {string} name - signal name
      * @param {...any} args - forwarded to every handler

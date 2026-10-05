@@ -6,7 +6,7 @@ import St from 'gi://St';
 
 import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {label, DIM_OPACITY} from './Widgets.js';
+import {label, setText, DIM_OPACITY} from './Widgets.js';
 import {ARROWS} from './PanelText.js';
 import {speedParts} from '../utils/Formatters.js';
 
@@ -40,8 +40,8 @@ class SpeedTile extends St.BoxLayout {
      */
     update(rate, options) {
         const {value, unit} = speedParts(rate, options);
-        this._value.text = value;
-        this._unit.text = unit;
+        setText(this._value, value);
+        setText(this._unit, unit);
     }
 
     /** @returns {string} the shown text, for tests */

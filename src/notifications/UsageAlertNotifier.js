@@ -31,7 +31,7 @@ export class UsageAlertNotifier {
 
     check() {
         const config = this._settings.alerts;
-        if (!config.enabled || !this._usageTracker.enabled)
+        if (!config.enabled || !this._usageTracker.enabled || (!config.daily && !config.monthly))
             return;
 
         const now = GLib.DateTime.new_now_local();

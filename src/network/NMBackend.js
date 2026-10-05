@@ -21,6 +21,16 @@ Gio._promisify(NM.Client, 'new_async');
 // Network changes arrive as bursts of property notifications; settle first.
 const SETTLE_DELAY_MS = 250;
 
+// Only these properties affect what we report. Others, such as the Wi-Fi
+// bitrate or scan timestamps, change constantly and are ignored.
+const CLIENT_PROPERTIES = new Set([
+    'primary-connection', 'active-connections', 'connectivity', 'state', 'nm-running',
+]);
+const WATCHED_PROPERTIES = new Set([
+    'state', 'ip4-config', 'ip6-config', 'devices', 'id', 'ip-interface',
+    'active-access-point', 'addresses',
+]);
+
 const VPN_CONNECTION_TYPES = new Set(['vpn', 'wireguard', 'tun']);
 const VPN_DEVICE_TYPES = new Set([
     NM.DeviceType.TUN, NM.DeviceType.WIREGUARD, NM.DeviceType.IP_TUNNEL,
@@ -228,6 +238,8 @@ export class NMBackend extends EventEmitter {
         const queue = () => this._queueRefresh();
         this._clientHandlers = [
             connectSignal(this._client, 'notify', (_obj, pspec) => {
+                if (!CLIENT_PROPERTIES.has(pspec.name))
+                    return;
                 if (pspec.name === 'nm-running')
                     this.emit('running-changed', this.running);
                 queue();
@@ -251,10 +263,17 @@ export class NMBackend extends EventEmitter {
     // State and IP changes of the chosen connection don't always surface as
     // client-level notifications, so watch the objects we depend on directly.
     _watch(objects) {
+        objects = objects.filter(Boolean);
+        if (objects.length === this._watched.length &&
+            objects.every((obj, i) => obj === this._watched[i][0]))
+            return;
         this._unwatch();
         for (const obj of objects) {
-            if (obj)
-                this._watched.push([obj, connectSignal(obj, 'notify', () => this._queueRefresh())]);
+            const id = connectSignal(obj, 'notify', (_obj, pspec) => {
+                if (WATCHED_PROPERTIES.has(pspec.name))
+                    this._queueRefresh();
+            });
+            this._watched.push([obj, id]);
         }
     }
 
@@ -271,7 +290,8 @@ export class NMBackend extends EventEmitter {
         let info;
         try {
             const {uplink, vpn} = chooseConnections(this._client);
-            this._watch([uplink, uplink?.get_devices()[0], vpn]);
+            this._watch([uplink, uplink?.get_devices()[0], vpn,
+                uplink?.get_ip4_config(), uplink?.get_ip6_config()]);
             info = describeNetwork(this._client);
         } catch (e) {
             // Keep the last known state; the next notification retries.

@@ -18,6 +18,18 @@ export function label(styleClass, props = {}) {
 }
 
 /**
+ * Sets a label's text only when it differs; an unchanged text would still
+ * cost a relayout.
+ *
+ * @param {St.Label} target - label
+ * @param {string} text - new text
+ */
+export function setText(target, text) {
+    if (target.text !== text)
+        target.text = text;
+}
+
+/**
  * @param {string} text - section heading
  * @returns {St.Label}
  */
@@ -41,8 +53,7 @@ class StatRow extends St.BoxLayout {
 
     /** @param {string} text - value to show */
     set value(text) {
-        if (this._value.text !== text)
-            this._value.text = text;
+        setText(this._value, text);
     }
 
     /** @returns {string} the shown value */
