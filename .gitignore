@@ -3,3 +3,5 @@ schemas/gschemas.compiled
 dist/
 node_modules/
 test-output/
+__pycache__/
+*.pyc
