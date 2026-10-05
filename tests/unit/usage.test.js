@@ -14,9 +14,9 @@ const readFile = path => new TextDecoder().decode(GLib.file_get_contents(path)[1
 
 /**
  * @param {object} [opts] - tracker options
- * @returns {{tracker: UsageTracker, clock: {now: GLib.DateTime}, storage: UsageStorage, dir: string}}
+ * @returns {Promise<{tracker: UsageTracker, clock: {now: GLib.DateTime}, storage: UsageStorage, dir: string}>}
  */
-function makeTracker(opts = {}) {
+async function makeTracker(opts = {}) {
     const dir = opts.dir ?? makeTempDir();
     const storage = opts.storage ?? new UsageStorage(`${dir}/usage.json`);
     const clock = {now: opts.now ?? MONDAY};
@@ -28,38 +28,38 @@ function makeTracker(opts = {}) {
         retentionDays: opts.retentionDays,
         clock: () => clock.now,
     });
-    tracker.load();
+    await tracker.load();
     return {tracker, clock, storage, dir};
 }
 
 // ---- Storage ----------------------------------------------------------------
 
-test('storage round-trips data with private permissions', () => {
+test('storage round-trips data with private permissions', async () => {
     const dir = makeTempDir();
     const storage = new UsageStorage(`${dir}/sub/usage.json`);
     const data = emptyData();
     data.days['2026-10-05'] = {rx: 5, tx: 6};
     data.months['2026-10'] = {rx: 5, tx: 6};
-    assert(storage.save(data, '2026-10-05'), 'saved');
-    assertEqual(new UsageStorage(`${dir}/sub/usage.json`).load(), data);
+    assert(await storage.save(data, '2026-10-05'), 'saved');
+    assertEqual((await new UsageStorage(`${dir}/sub/usage.json`).load()), data);
 
     const info = Gio.File.new_for_path(`${dir}/sub/usage.json`).query_info('unix::mode', 0, null);
     assertEqual(info.get_attribute_uint32('unix::mode') & 0o777, 0o600);
 });
 
-test('storage starts empty when no file exists', () => {
-    assertEqual(new UsageStorage(`${makeTempDir()}/usage.json`).load(), emptyData());
+test('storage starts empty when no file exists', async () => {
+    assertEqual(await new UsageStorage(`${makeTempDir()}/usage.json`).load(), emptyData());
 });
 
-test('storage recovers from a corrupt file using the daily backup', () => {
+test('storage recovers from a corrupt file using the daily backup', async () => {
     const dir = makeTempDir();
     const storage = new UsageStorage(`${dir}/usage.json`);
     const data = emptyData();
     data.days['2026-10-04'] = {rx: 1, tx: 2};
-    storage.save(data, '2026-10-04');
+    await storage.save(data, '2026-10-04');
 
     writeFile(`${dir}/usage.json`, '{"version": 1, "days": {"2026-10-05": {"rx": 9');
-    const loaded = new UsageStorage(`${dir}/usage.json`).load();
+    const loaded = (await new UsageStorage(`${dir}/usage.json`).load());
     assertEqual(loaded.days, {'2026-10-04': {rx: 1, tx: 2}});
 
     const names = [];
@@ -69,23 +69,23 @@ test('storage recovers from a corrupt file using the daily backup', () => {
     assert(names.some(n => n.startsWith('usage.json.corrupt-')), 'corrupt file kept aside');
 });
 
-test('storage falls back to empty data when the backup is corrupt too', () => {
+test('storage falls back to empty data when the backup is corrupt too', async () => {
     const dir = makeTempDir();
     writeFile(`${dir}/usage.json`, 'not json');
     writeFile(`${dir}/usage.json.bak`, '[]');
-    assertEqual(new UsageStorage(`${dir}/usage.json`).load(), emptyData());
+    assertEqual((await new UsageStorage(`${dir}/usage.json`).load()), emptyData());
 });
 
-test('backup is refreshed once per day', () => {
+test('backup is refreshed once per day', async () => {
     const dir = makeTempDir();
     const storage = new UsageStorage(`${dir}/usage.json`);
     const data = emptyData();
     data.days['2026-10-05'] = {rx: 1, tx: 1};
-    storage.save(data, '2026-10-05');
+    await storage.save(data, '2026-10-05');
     data.days['2026-10-05'].rx = 2;
-    storage.save(data, '2026-10-05');
+    await storage.save(data, '2026-10-05');
     assertEqual(JSON.parse(readFile(`${dir}/usage.json.bak`)).days['2026-10-05'].rx, 1);
-    storage.save(data, '2026-10-06');
+    await storage.save(data, '2026-10-06');
     assertEqual(JSON.parse(readFile(`${dir}/usage.json.bak`)).days['2026-10-05'].rx, 2);
 });
 
@@ -157,8 +157,8 @@ test('dailySeries and hourlySeries fill gaps with zeros', () => {
 
 // ---- Tracker -----------------------------------------------------------------
 
-test('tracker attributes traffic to session, hour, day and month', () => {
-    const {tracker} = makeTracker();
+test('tracker attributes traffic to session, hour, day and month', async () => {
+    const {tracker} = await makeTracker();
     tracker.add(2 * GB, 1 * GB);
     tracker.add(500, 0);
     const day = tracker.data.days['2026-10-05'];
@@ -169,67 +169,67 @@ test('tracker attributes traffic to session, hour, day and month', () => {
     assertEqual(tracker.totals.today, {rx: 2 * GB + 500, tx: GB});
 });
 
-test('tracker persists across restarts and keeps the session per login', () => {
-    const {tracker, dir} = makeTracker();
+test('tracker persists across restarts and keeps the session per login', async () => {
+    const {tracker, dir} = await makeTracker();
     tracker.add(100, 50);
-    tracker.destroy();
+    await tracker.destroy();
 
-    const sameSession = makeTracker({dir}).tracker;
+    const sameSession = (await makeTracker({dir})).tracker;
     assertEqual(sameSession.totals.today, {rx: 100, tx: 50});
     assertEqual(sameSession.session, {rx: 100, tx: 50}, 'lock/unlock keeps the session');
 
-    const newSession = makeTracker({dir, sessionId: 'boot-2:200', bootId: 'boot-2'}).tracker;
+    const newSession = (await makeTracker({dir, sessionId: 'boot-2:200', bootId: 'boot-2'})).tracker;
     assertEqual(newSession.totals.today, {rx: 100, tx: 50}, 'history survives a reboot');
     assertEqual(newSession.session, {rx: 0, tx: 0}, 'a new login starts a new session');
 });
 
-test('tracker only writes when something changed', () => {
+test('tracker only writes when something changed', async () => {
     let saves = 0;
     const storage = {load: () => emptyData(), save: () => ++saves > 0};
-    const {tracker} = makeTracker({storage});
-    tracker.save();
+    const {tracker} = await makeTracker({storage});
+    await tracker.save();
     assertEqual(saves, 1, 'new session is saved');
     tracker.add(0, 0, {iface: 'wlo1', rx: 10, tx: 10});
-    tracker.save();
+    await tracker.save();
     assertEqual(saves, 2, 'first counters baseline is saved');
     tracker.add(0, 0, {iface: 'wlo1', rx: 10, tx: 10});
-    tracker.save();
+    await tracker.save();
     assertEqual(saves, 2, 'idle samples cause no writes');
     tracker.add(1, 0, {iface: 'wlo1', rx: 11, tx: 10});
-    tracker.save();
+    await tracker.save();
     assertEqual(saves, 3);
 });
 
-test('tracker recovers traffic from kernel counters within the same boot', () => {
-    const {tracker, dir} = makeTracker();
+test('tracker recovers traffic from kernel counters within the same boot', async () => {
+    const {tracker, dir} = await makeTracker();
     tracker.add(100, 100, {iface: 'wlo1', rx: 1000, tx: 2000});
-    tracker.destroy();
+    await tracker.destroy();
 
     // The screen was locked; 5000/700 more bytes went through meanwhile.
-    const resumed = makeTracker({dir}).tracker;
-    const recovered = resumed.catchUp(() => ({rx: 6000, tx: 2700}));
+    const resumed = (await makeTracker({dir})).tracker;
+    const recovered = await resumed.catchUp(() => ({rx: 6000, tx: 2700}));
     assertEqual(recovered, {rx: 5000, tx: 700});
     assertEqual(resumed.totals.today, {rx: 5100, tx: 800});
     assertEqual(resumed.session, {rx: 5100, tx: 800});
     assertEqual(resumed.data.counters, {bootId: 'boot-1', iface: 'wlo1', rx: 6000, tx: 2700});
 });
 
-test('tracker does not recover across reboots or counter resets', () => {
-    const {tracker, dir} = makeTracker();
+test('tracker does not recover across reboots or counter resets', async () => {
+    const {tracker, dir} = await makeTracker();
     tracker.add(1, 1, {iface: 'wlo1', rx: 1000, tx: 1000});
-    tracker.destroy();
+    await tracker.destroy();
 
-    const rebooted = makeTracker({dir, bootId: 'boot-2'}).tracker;
-    assertEqual(rebooted.catchUp(() => ({rx: 9000, tx: 9000})), null);
+    const rebooted = (await makeTracker({dir, bootId: 'boot-2'})).tracker;
+    assertEqual(await rebooted.catchUp(() => ({rx: 9000, tx: 9000})), null);
 
-    const reset = makeTracker({dir}).tracker;
-    assertEqual(reset.catchUp(() => ({rx: 10, tx: 10})), null, 'interface was recreated');
-    assertEqual(reset.catchUp(() => null), null, 'interface is gone');
+    const reset = (await makeTracker({dir})).tracker;
+    assertEqual(await reset.catchUp(() => ({rx: 10, tx: 10})), null, 'interface was recreated');
+    assertEqual(await reset.catchUp(() => null), null, 'interface is gone');
     assertEqual(reset.totals.today, {rx: 1, tx: 1});
 });
 
-test('tracker handles day and month rollover', () => {
-    const {tracker, clock} = makeTracker({now: GLib.DateTime.new_local(2026, 9, 30, 23, 59, 0)});
+test('tracker handles day and month rollover', async () => {
+    const {tracker, clock} = await makeTracker({now: GLib.DateTime.new_local(2026, 9, 30, 23, 59, 0)});
     tracker.add(10, 0);
     clock.now = GLib.DateTime.new_local(2026, 10, 1, 0, 1, 0);
     tracker.add(20, 0);
@@ -240,8 +240,8 @@ test('tracker handles day and month rollover', () => {
     assertEqual(tracker.data.days['2026-10-01'].hrx[0], 20);
 });
 
-test('tracker prunes history beyond the retention period', () => {
-    const {tracker, clock} = makeTracker({retentionDays: 30});
+test('tracker prunes history beyond the retention period', async () => {
+    const {tracker, clock} = await makeTracker({retentionDays: 30});
     tracker.add(1, 1);
     clock.now = MONDAY.add_days(29);
     tracker.add(1, 1);
@@ -252,8 +252,8 @@ test('tracker prunes history beyond the retention period', () => {
     assert(!('2026-10-05' in tracker.data.days), 'dropped after the retention period');
 });
 
-test('resetAll clears history but keeps the counters baseline', () => {
-    const {tracker} = makeTracker();
+test('resetAll clears history but keeps the counters baseline', async () => {
+    const {tracker} = await makeTracker();
     tracker.add(5, 5, {iface: 'wlo1', rx: 50, tx: 50});
     tracker.resetAll();
     assertEqual(tracker.totals.today, {rx: 0, tx: 0});
@@ -261,42 +261,42 @@ test('resetAll clears history but keeps the counters baseline', () => {
     assertEqual(tracker.data.counters.rx, 50);
 });
 
-test('tracker writes data recovered from the backup back immediately', () => {
-    const {tracker, dir} = makeTracker();
+test('tracker writes data recovered from the backup back immediately', async () => {
+    const {tracker, dir} = await makeTracker();
     tracker.add(42, 0);
-    tracker.destroy();
+    await tracker.destroy();
     writeFile(`${dir}/usage.json`, '{"broken');
 
-    const recovered = makeTracker({dir}).tracker;
+    const recovered = (await makeTracker({dir})).tracker;
     assertEqual(recovered.totals.today.rx, 42);
     assertEqual(JSON.parse(readFile(`${dir}/usage.json`)).days['2026-10-05'].rx, 42,
         'main file restored without waiting for new traffic');
 });
 
-test('paused tracking records nothing but keeps the counters baseline', () => {
-    const {tracker, dir} = makeTracker();
+test('paused tracking records nothing but keeps the counters baseline', async () => {
+    const {tracker, dir} = await makeTracker();
     tracker.setEnabled(false);
     tracker.add(100, 100, {iface: 'wlo1', rx: 5000, tx: 5000});
     assertEqual(tracker.totals.today, {rx: 0, tx: 0});
     assertEqual(tracker.data.counters.rx, 5000, 'baseline follows the counters');
-    tracker.destroy();
+    await tracker.destroy();
 
-    const paused = makeTracker({dir}).tracker;
+    const paused = (await makeTracker({dir})).tracker;
     paused.setEnabled(false);
-    assertEqual(paused.catchUp(() => ({rx: 9000, tx: 9000})), null, 'no catch-up while paused');
+    assertEqual(await paused.catchUp(() => ({rx: 9000, tx: 9000})), null, 'no catch-up while paused');
 });
 
-test('reset requests are applied once, also across restarts', () => {
-    const {tracker, dir} = makeTracker();
+test('reset requests are applied once, also across restarts', async () => {
+    const {tracker, dir} = await makeTracker();
     tracker.add(10, 10);
     tracker.applyResetRequest(1000);
     assertEqual(tracker.totals.today, {rx: 0, tx: 0});
     tracker.add(5, 5);
     tracker.applyResetRequest(1000);
     assertEqual(tracker.totals.today, {rx: 5, tx: 5}, 'the same request is not applied twice');
-    tracker.destroy();
+    await tracker.destroy();
 
-    const restarted = makeTracker({dir}).tracker;
+    const restarted = (await makeTracker({dir})).tracker;
     restarted.applyResetRequest(1000);
     assertEqual(restarted.totals.today, {rx: 5, tx: 5}, 'applied requests are remembered');
     restarted.applyResetRequest(2000);

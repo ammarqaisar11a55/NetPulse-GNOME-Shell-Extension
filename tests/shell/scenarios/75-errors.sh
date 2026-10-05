@@ -36,8 +36,10 @@ np_eval "(ext._speedMonitor._publish({iface: ext._speedMonitor.iface, download: 
 np_eval '(ext._usageTracker.save(), ext._usageTracker.save(), true)' >/dev/null
 np_eval "(ext._speedMonitor._publish({iface: ext._speedMonitor.iface, download: 0, upload: 0, rxDelta: 1000, txDelta: 0}), true)" >/dev/null
 np_eval '(ext._usageTracker.save(), true)' >/dev/null
+sleep 0.5 # saves complete asynchronously
 expect_eq "a failing save is reported once" "$(log_count 'Cannot save usage data')" 1
 expect_eq "extension stays active" "$(ext_state)" ACTIVE
 chmod 700 "$DATA_DIR"
 np_eval '(ext._usageTracker.save(), true)' >/dev/null
+sleep 0.5
 expect_eq "recovery is reported" "$(log_count 'Usage data can be saved again')" 1

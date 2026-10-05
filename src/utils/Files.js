@@ -1,21 +1,26 @@
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 const decoder = new TextDecoder();
 
 /**
- * Reads a small text file synchronously. Intended for procfs/sysfs entries,
- * which are generated in memory by the kernel and never block.
+ * Reads a small text file asynchronously, so a slow disk can never stall
+ * GNOME Shell.
  *
  * @param {string} path - absolute path
- * @returns {string|null} file contents, or null if it cannot be read
+ * @returns {Promise<string|null>} file contents, or null if it cannot be read
  */
 export function readText(path) {
-    try {
-        const [ok, bytes] = GLib.file_get_contents(path);
-        return ok ? decoder.decode(bytes) : null;
-    } catch {
-        return null;
-    }
+    return new Promise(resolve => {
+        Gio.File.new_for_path(path).load_contents_async(null, (file, result) => {
+            try {
+                const [, bytes] = file.load_contents_finish(result);
+                resolve(decoder.decode(bytes));
+            } catch {
+                resolve(null);
+            }
+        });
+    });
 }
 
 /**

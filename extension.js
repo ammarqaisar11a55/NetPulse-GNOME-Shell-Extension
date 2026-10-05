@@ -22,26 +22,19 @@ const PANEL_SLOTS = {left: -1, center: -1, right: 0};
 
 export default class NetPulseExtension extends Extension {
     enable() {
+        this._signals = [];
         this._settings = new SettingsManager(this.getSettings());
         Logger.setDebug(this._settings.debugLogging);
-        this._settings.connect('debug', () => Logger.setDebug(this._settings.debugLogging));
 
         this._speedMonitor = new SpeedMonitor({intervalMs: this._settings.refreshIntervalMs});
-        this._settings.connect('interval',
-            () => this._speedMonitor?.setIntervalMs(this._settings.refreshIntervalMs));
-
         this._interfaceMonitor = new InterfaceMonitor();
         this._interfaceMonitor.setManualInterface(this._settings.manualInterface);
-        this._settings.connect('network',
-            () => this._interfaceMonitor?.setManualInterface(this._settings.manualInterface));
-
-        this._usageTracker = this._createUsageTracker();
-        this._settings.connect('usage', () => {
-            this._usageTracker.setEnabled(this._settings.usageTracking);
-            this._usageTracker.setRetentionDays(this._settings.retentionDays);
+        this._usageTracker = new UsageTracker({
+            storage: new UsageStorage(),
+            weekStart: Shell.util_get_week_start(),
+            retentionDays: this._settings.retentionDays,
         });
-        this._settings.connect('reset',
-            () => this._usageTracker.applyResetRequest(this._settings.resetRequest));
+        this._usageTracker.setEnabled(this._settings.usageTracking);
 
         this._notifier = new Notifier();
         this._usageAlerts = new UsageAlertNotifier({
@@ -56,28 +49,22 @@ export default class NetPulseExtension extends Extension {
         });
 
         this._createIndicator();
-        this._settings.connect('display', () => this._indicator?.setOptions(this._settings.display));
-        this._settings.connect('position', () => this._createIndicator());
-
-        this._speedMonitor.connect('sample', sample => {
-            this._indicator?.setSample(sample);
-            this._usageTracker.add(sample.rxDelta, sample.txDelta,
-                sample.counters && {iface: sample.iface, ...sample.counters});
-        });
-        this._interfaceMonitor.connect('changed', info => this._onNetworkChanged(info));
-        this._interfaceMonitor.start().catch(e =>
-            Logger.error('Failed to start network detection:', e));
+        this._connectSignals();
 
         // The shell does not disable extensions when the session ends: save
         // usage and stop monitoring before teardown, so no data is lost and
         // no callbacks fire during finalization.
         global.connectObject('shutdown', () => this._onShutdown(), this);
 
-        Logger.info('Enabled');
+        this._start().catch(e => Logger.error('Failed to start monitoring:', e));
     }
 
     disable() {
         global.disconnectObject(this);
+        for (const [source, id] of this._signals)
+            source.disconnect(id);
+        this._signals = [];
+
         this._stopMonitoring();
         this._usageAlerts?.destroy();
         this._usageAlerts = null;
@@ -88,33 +75,60 @@ export default class NetPulseExtension extends Extension {
         this._usageTracker = null;
         this._settings?.destroy();
         this._settings = null;
-
-        Logger.info('Disabled');
     }
 
-    _createUsageTracker() {
-        const bootId = readBootId();
-        const tracker = new UsageTracker({
-            storage: new UsageStorage(),
+    _connect(source, signal, callback) {
+        this._signals.push([source, source.connect(signal, callback)]);
+    }
+
+    _connectSignals() {
+        const settings = this._settings;
+        this._connect(settings, 'debug', () => Logger.setDebug(settings.debugLogging));
+        this._connect(settings, 'interval',
+            () => this._speedMonitor?.setIntervalMs(settings.refreshIntervalMs));
+        this._connect(settings, 'network',
+            () => this._interfaceMonitor?.setManualInterface(settings.manualInterface));
+        this._connect(settings, 'usage', () => {
+            this._usageTracker.setEnabled(settings.usageTracking);
+            this._usageTracker.setRetentionDays(settings.retentionDays);
+        });
+        this._connect(settings, 'reset',
+            () => this._usageTracker.applyResetRequest(settings.resetRequest));
+        this._connect(settings, 'display', () => this._indicator?.setOptions(settings.display));
+        this._connect(settings, 'position', () => this._createIndicator());
+
+        this._connect(this._speedMonitor, 'sample', sample => {
+            this._indicator?.setSample(sample);
+            this._usageTracker.add(sample.rxDelta, sample.txDelta,
+                sample.counters && {iface: sample.iface, ...sample.counters});
+        });
+        this._connect(this._interfaceMonitor, 'changed', info => this._onNetworkChanged(info));
+    }
+
+    // Loads the usage data and catches up on traffic missed while disabled
+    // before monitoring starts, so nothing is counted twice.
+    async _start() {
+        const tracker = this._usageTracker;
+        const bootId = await readBootId();
+        await tracker.load({
             bootId,
             // Survives screen locking (which disables extensions) but not a
             // new login.
             sessionId: `${bootId}:${new Gio.Credentials().get_unix_pid()}`,
-            weekStart: Shell.util_get_week_start(),
-            retentionDays: this._settings.retentionDays,
         });
-        tracker.setEnabled(this._settings.usageTracking);
-        // Load and catch up before monitoring starts, so no traffic is
-        // counted twice.
-        tracker.load();
+        if (tracker !== this._usageTracker)
+            return; // disabled meanwhile
         tracker.applyResetRequest(this._settings.resetRequest);
-        tracker.catchUp(iface => readCounters(iface));
+        await tracker.catchUp(iface => readCounters(iface));
+        if (tracker !== this._usageTracker || !this._interfaceMonitor)
+            return;
         tracker.startAutosave();
-        return tracker;
+
+        await this._interfaceMonitor.start();
     }
 
     _onShutdown() {
-        this._usageTracker?.save();
+        this._usageTracker?.saveSync();
         this._stopMonitoring();
     }
 
@@ -132,7 +146,10 @@ export default class NetPulseExtension extends Extension {
         this._dashboard = null;
         const indicator = this._indicator;
         this._indicator = null;
-        indicator?.destroy();
+        if (indicator) {
+            indicator.disconnect(this._indicatorDestroyId);
+            indicator.destroy();
+        }
     }
 
     _createIndicator() {
@@ -141,24 +158,22 @@ export default class NetPulseExtension extends Extension {
         // Only the shell's own teardown destroys the indicator behind our
         // back. Its shutdown handler runs before ours, inside a main loop
         // that still dispatches our timers, so stop right away.
-        indicator.connect('destroy', () => {
-            if (this._indicator !== indicator)
-                return;
+        this._indicatorDestroyId = indicator.connect('destroy', () => {
             this._indicator = null;
             this._dashboard?.destroy();
             this._dashboard = null;
             this._onShutdown();
         });
-        this._indicator.setOptions(this._settings.display);
+        indicator.setOptions(this._settings.display);
         if (this._speedMonitor)
-            this._indicator.setSample(this._speedMonitor.current);
+            indicator.setSample(this._speedMonitor.current);
         if (this._interfaceMonitor)
-            this._indicator.setOnline(isOnline(this._interfaceMonitor.info));
+            indicator.setOnline(isOnline(this._interfaceMonitor.info));
 
-        this._indicator.setMenuBuilder(() => {
+        indicator.setMenuBuilder(() => {
             if (!this._speedMonitor || !this._interfaceMonitor)
                 return;
-            this._dashboard = new PopupDashboard(this._indicator.menu, {
+            this._dashboard = new PopupDashboard(indicator.menu, {
                 speedMonitor: this._speedMonitor,
                 interfaceMonitor: this._interfaceMonitor,
                 usageTracker: this._usageTracker,
@@ -168,12 +183,12 @@ export default class NetPulseExtension extends Extension {
         });
 
         const position = this._settings.panelPosition;
-        Main.panel.addToStatusArea(this.uuid, this._indicator, PANEL_SLOTS[position], position);
+        Main.panel.addToStatusArea(this.uuid, indicator, PANEL_SLOTS[position], position);
     }
 
     _onNetworkChanged(info) {
         const online = isOnline(info);
-        this._speedMonitor.setInterface(online ? info.name : null);
+        this._speedMonitor?.setInterface(online ? info.name : null);
         this._indicator?.setOnline(online);
     }
 }

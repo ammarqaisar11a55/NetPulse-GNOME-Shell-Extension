@@ -158,13 +158,13 @@ export function findIPv6Address(iface, ifInet6Text) {
  *
  * @param {string} iface - interface name
  * @param {string} sysRoot - sysfs network class directory
- * @returns {string} one of InterfaceType
+ * @returns {Promise<string>} one of InterfaceType
  */
-export function classifyInterface(iface, sysRoot = '/sys/class/net') {
+export async function classifyInterface(iface, sysRoot = '/sys/class/net') {
     const dir = `${sysRoot}/${iface}`;
-    const uevent = readText(`${dir}/uevent`) ?? '';
-    const devType = uevent.match(/^DEVTYPE=(.*)$/m)?.[1] ?? '';
-    const arpType = parseInt(readText(`${dir}/type`) ?? '0', 10);
+    const [uevent, type] = await Promise.all([readText(`${dir}/uevent`), readText(`${dir}/type`)]);
+    const devType = (uevent ?? '').match(/^DEVTYPE=(.*)$/m)?.[1] ?? '';
+    const arpType = parseInt(type ?? '0', 10);
 
     if (devType === 'wlan' || exists(`${dir}/wireless`) || exists(`${dir}/phy80211`))
         return InterfaceType.WIFI;
@@ -220,10 +220,10 @@ export function hasStatistics(iface, sysRoot = '/sys/class/net') {
 /**
  * @param {string} iface - interface name
  * @param {string} sysRoot - sysfs network class directory
- * @returns {boolean} whether the link is administratively up with carrier
+ * @returns {Promise<boolean>} whether the link is administratively up with carrier
  */
-function isLinkUp(iface, sysRoot) {
-    const operstate = (readText(`${sysRoot}/${iface}/operstate`) ?? '').trim();
+async function isLinkUp(iface, sysRoot) {
+    const operstate = ((await readText(`${sysRoot}/${iface}/operstate`)) ?? '').trim();
     // Virtual and tunnel devices often report "unknown" while working fine.
     return operstate === 'up' || operstate === 'unknown';
 }
@@ -236,16 +236,25 @@ function isLinkUp(iface, sysRoot) {
  * @param {string} [options.sysRoot] - sysfs network class directory (for tests)
  * @param {string|null} [options.manualInterface] - describe this interface
  *   instead of the one carrying the default route
- * @returns {import('./InterfaceTypes.js').NetworkInfo}
+ * @returns {Promise<import('./InterfaceTypes.js').NetworkInfo>}
  */
-export function detectKernelNetwork({procRoot = '/proc', sysRoot = '/sys/class/net',
+export async function detectKernelNetwork({procRoot = '/proc', sysRoot = '/sys/class/net',
     manualInterface = null} = {}) {
-    const routeText = readText(`${procRoot}/net/route`);
-    const route6Text = readText(`${procRoot}/net/ipv6_route`);
+    const [routeText, route6Text, fibTrieText, ifInet6Text] = await Promise.all([
+        readText(`${procRoot}/net/route`), readText(`${procRoot}/net/ipv6_route`),
+        readText(`${procRoot}/net/fib_trie`), readText(`${procRoot}/net/if_inet6`),
+    ]);
     const source = manualInterface ? 'manual' : 'kernel';
 
-    const isTunnel = iface => classifyInterface(iface, sysRoot) === InterfaceType.VPN;
-    const usable = iface => hasStatistics(iface, sysRoot) && isLinkUp(iface, sysRoot);
+    // Gather what the selection needs about every interface up front.
+    const names = listInterfaces(sysRoot);
+    const facts = new Map(await Promise.all(names.map(async iface => [iface, {
+        type: await classifyInterface(iface, sysRoot),
+        up: await isLinkUp(iface, sysRoot),
+        stats: hasStatistics(iface, sysRoot),
+    }])));
+    const isTunnel = iface => facts.get(iface)?.type === InterfaceType.VPN;
+    const usable = iface => Boolean(facts.get(iface)?.stats && facts.get(iface)?.up);
 
     let name;
     if (manualInterface) {
@@ -257,8 +266,7 @@ export function detectKernelNetwork({procRoot = '/proc', sysRoot = '/sys/class/n
         name ??= findDefaultInterface(routeText, route6Text, usable);
     }
 
-    const vpnIface = listInterfaces(sysRoot)
-        .find(i => i !== name && isTunnel(i) && isLinkUp(i, sysRoot));
+    const vpnIface = names.find(i => i !== name && isTunnel(i) && facts.get(i).up);
     const vpn = vpnIface ? {name: vpnIface, iface: vpnIface} : null;
 
     if (!name)
@@ -266,10 +274,10 @@ export function detectKernelNetwork({procRoot = '/proc', sysRoot = '/sys/class/n
 
     return makeNetworkInfo({
         name,
-        type: classifyInterface(name, sysRoot),
-        state: isLinkUp(name, sysRoot) ? ConnectionState.CONNECTED : ConnectionState.DISCONNECTED,
-        ipv4: findIPv4Address(name, routeText, readText(`${procRoot}/net/fib_trie`)),
-        ipv6: findIPv6Address(name, readText(`${procRoot}/net/if_inet6`)),
+        type: facts.get(name)?.type ?? await classifyInterface(name, sysRoot),
+        state: await isLinkUp(name, sysRoot) ? ConnectionState.CONNECTED : ConnectionState.DISCONNECTED,
+        ipv4: findIPv4Address(name, routeText, fibTrieText),
+        ipv6: findIPv6Address(name, ifInet6Text),
         vpn,
         source,
     });
@@ -295,7 +303,7 @@ export class KernelBackend extends EventEmitter {
     }
 
     start() {
-        this.refresh();
+        Logger.guard('reading kernel network state', () => this.refresh());
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT_IDLE, POLL_INTERVAL_MS, () => {
             Logger.guard('reading kernel network state', () => this.refresh());
             return GLib.SOURCE_CONTINUE;
@@ -318,18 +326,34 @@ export class KernelBackend extends EventEmitter {
         });
     }
 
-    refresh() {
-        let info;
-        try {
-            info = detectKernelNetwork(this._options);
-        } catch (e) {
-            Logger.warn('Kernel network detection failed:', e.message);
-            info = makeNetworkInfo();
-        }
-        if (sameNetworkInfo(info, this._info))
+    async refresh() {
+        // One detection at a time; a request arriving meanwhile runs once
+        // the current one is done, so the latest state always wins.
+        if (this._refreshing) {
+            this._refreshAgain = true;
             return;
-        this._info = info;
-        this.emit('changed', info);
+        }
+        this._refreshing = true;
+        try {
+            do {
+                this._refreshAgain = false;
+                let info;
+                try {
+                    info = await detectKernelNetwork(this._options);
+                } catch (e) {
+                    Logger.warn('Kernel network detection failed:', e.message);
+                    info = makeNetworkInfo();
+                }
+                if (this._destroyed)
+                    return;
+                if (!sameNetworkInfo(info, this._info)) {
+                    this._info = info;
+                    this.emit('changed', info);
+                }
+            } while (this._refreshAgain);
+        } finally {
+            this._refreshing = false;
+        }
     }
 
     /** @param {string|null} name - interface to describe, or null for automatic */
@@ -337,10 +361,11 @@ export class KernelBackend extends EventEmitter {
         if (this._options.manualInterface === name)
             return;
         this._options.manualInterface = name;
-        this.refresh();
+        Logger.guard('reading kernel network state', () => this.refresh());
     }
 
     destroy() {
+        this._destroyed = true;
         for (const id of [this._timerId, this._settleId]) {
             if (id)
                 GLib.source_remove(id);

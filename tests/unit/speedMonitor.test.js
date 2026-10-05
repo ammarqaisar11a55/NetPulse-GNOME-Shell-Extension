@@ -67,8 +67,9 @@ test('SpeedMonitor samples counters and survives interface switches', async () =
     monitor.connect('sample', s => samples.push(s));
 
     monitor.setInterface('wlp2s0');
+    await sleep(100); // the baseline is read asynchronously
     setCounters(sysRoot, 'wlp2s0', 1_500_000, 1_100_000);
-    await sleep(650);
+    await sleep(550);
 
     const wifi = samples.filter(s => s.iface === 'wlp2s0' && s.rxDelta > 0);
     assertEqual(wifi.length, 1, 'one Wi-Fi sample');

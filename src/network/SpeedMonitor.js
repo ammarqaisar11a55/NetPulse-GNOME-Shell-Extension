@@ -3,8 +3,8 @@
 //   download = (rx_bytes_now - rx_bytes_before) / elapsed
 //   upload   = (tx_bytes_now - tx_bytes_before) / elapsed
 //
-// Each tick costs two reads of in-memory sysfs files. The timer only runs
-// while there is an interface to measure.
+// Each tick costs two asynchronous reads of in-memory sysfs files. The timer
+// only runs while there is an interface to measure.
 
 import GLib from 'gi://GLib';
 
@@ -34,15 +34,18 @@ const MAX_PLAUSIBLE_RATE = 50e9;
 /**
  * @param {string} iface - interface name
  * @param {string} [sysRoot] - sysfs network class directory
- * @returns {{rx: number, tx: number}|null} total bytes received and sent
- *   since the interface appeared, or null if unavailable
+ * @returns {Promise<{rx: number, tx: number}|null>} total bytes received
+ *   and sent since the interface appeared, or null if unavailable
  */
-export function readCounters(iface, sysRoot = '/sys/class/net') {
+export async function readCounters(iface, sysRoot = '/sys/class/net') {
     if (!isValidInterfaceName(iface))
         return null;
     const dir = `${sysRoot}/${iface}/statistics`;
-    const rx = Number.parseInt(readText(`${dir}/rx_bytes`), 10);
-    const tx = Number.parseInt(readText(`${dir}/tx_bytes`), 10);
+    const [rxText, txText] = await Promise.all([
+        readText(`${dir}/rx_bytes`), readText(`${dir}/tx_bytes`),
+    ]);
+    const rx = Number.parseInt(rxText, 10);
+    const tx = Number.parseInt(txText, 10);
     return Number.isFinite(rx) && Number.isFinite(tx) ? {rx, tx} : null;
 }
 
@@ -113,6 +116,10 @@ export class SpeedMonitor extends EventEmitter {
         this._calculator = new SpeedCalculator();
         this._timerId = 0;
         this._readFailures = 0;
+        // Bumped on every interface switch, so a read that was still in
+        // flight for the previous interface is discarded.
+        this._generation = 0;
+        this._reading = false;
         this._history = [];
         this._current = this._zeroSample();
     }
@@ -152,12 +159,13 @@ export class SpeedMonitor extends EventEmitter {
             return;
         Logger.debug(`Speed monitor: ${this._iface} → ${iface}`);
         this._iface = iface;
+        this._generation++;
         this._calculator.reset();
         this._readFailures = 0;
         this._publish(this._zeroSample());
         this._syncTimer();
         if (iface)
-            this._sample();
+            Logger.guard('sampling network speed', () => this._sample());
     }
 
     /** @param {number} ms - new sampling interval */
@@ -196,8 +204,22 @@ export class SpeedMonitor extends EventEmitter {
         }
     }
 
-    _sample() {
-        const counters = readCounters(this._iface, this._sysRoot);
+    async _sample() {
+        // Readings are taken one at a time; a tick that finds the previous
+        // read still running is skipped.
+        if (this._reading)
+            return;
+        this._reading = true;
+        const generation = this._generation;
+        let counters;
+        try {
+            counters = await readCounters(this._iface, this._sysRoot);
+        } finally {
+            this._reading = false;
+        }
+        if (generation !== this._generation || this._destroyed)
+            return;
+
         if (!counters) {
             // An unplugged interface vanishes a moment before detection
             // notices; only a lasting failure is worth a warning.
@@ -225,6 +247,7 @@ export class SpeedMonitor extends EventEmitter {
     }
 
     destroy() {
+        this._destroyed = true;
         this._stopTimer();
         this.disconnectAll();
     }

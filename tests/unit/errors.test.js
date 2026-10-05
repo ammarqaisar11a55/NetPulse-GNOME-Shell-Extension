@@ -1,4 +1,6 @@
-import {test, assert, assertEqual, makeTempDir, writeFile} from '../harness.js';
+import GLib from 'gi://GLib';
+
+import {test, assert, assertEqual, makeTempDir, writeFile, sleep} from '../harness.js';
 import {isValidInterfaceName, makeNetworkInfo} from '../../src/network/InterfaceTypes.js';
 import {InterfaceMonitor} from '../../src/network/InterfaceMonitor.js';
 import {readCounters} from '../../src/network/SpeedMonitor.js';
@@ -13,8 +15,8 @@ test('interface names follow the kernel rules', () => {
         assert(!isValidInterfaceName(name), String(name));
 });
 
-test('sysfs readers refuse invalid names', () => {
-    assertEqual(readCounters('../../../proc/self'), null);
+test('sysfs readers refuse invalid names', async () => {
+    assertEqual(await readCounters('../../../proc/self'), null);
     assertEqual(hasStatistics('..'), false);
 });
 
@@ -25,14 +27,15 @@ test('guard keeps callers running and reports the value', () => {
     }, 'fallback'), 'fallback');
 });
 
-test('saving to an unwritable location fails softly', () => {
+test('saving to an unwritable location fails softly', async () => {
     // A regular file where the data directory should be.
     const storage = new UsageStorage('/proc/version/netpulse/usage.json');
-    assertEqual(storage.save(emptyData(), '2026-10-05'), false);
-    assertEqual(storage.save(emptyData(), '2026-10-05'), false);
+    assertEqual(await storage.save(emptyData(), '2026-10-05'), false);
+    assertEqual(await storage.save(emptyData(), '2026-10-05'), false);
+    assertEqual(storage.saveSync(emptyData(), '2026-10-05'), false);
 });
 
-test('detection falls back to the kernel while NetworkManager is down', () => {
+test('detection falls back to the kernel while NetworkManager is down', async () => {
     const root = makeTempDir();
     const write = (path, text) => writeFile(`${root}/${path}`, text);
     write('sys/eth0/statistics/rx_bytes', '0\n');
@@ -44,6 +47,7 @@ test('detection falls back to the kernel while NetworkManager is down', () => {
     const nm = {running: false, info: makeNetworkInfo({name: 'eth0', connection: 'Wired', state: 'connected', source: 'networkmanager'}), destroy() {}};
     monitor._nm = nm;
     monitor._update();
+    await sleep(300); // kernel detection reads its files asynchronously
     assertEqual([monitor.info.name, monitor.info.source], ['eth0', 'kernel'], 'NetworkManager stopped');
 
     nm.running = true;
@@ -51,4 +55,18 @@ test('detection falls back to the kernel while NetworkManager is down', () => {
     assertEqual([monitor.info.connection, monitor.info.source], ['Wired', 'networkmanager'], 'NetworkManager back');
     assertEqual(monitor._kernel, null, 'kernel polling stops again');
     monitor.destroy();
+});
+
+test('a failed save never touches the existing data file', async () => {
+    const dir = makeTempDir();
+    writeFile(`${dir}/usage.json`, '{"version": 1, "days": {}}');
+    GLib.spawn_command_line_sync(`chmod 500 ${dir}`);
+    try {
+        const storage = new UsageStorage(`${dir}/usage.json`);
+        assertEqual(await storage.save(emptyData(), '2026-10-05'), false);
+        const [, bytes] = GLib.file_get_contents(`${dir}/usage.json`);
+        assertEqual(new TextDecoder().decode(bytes), '{"version": 1, "days": {}}');
+    } finally {
+        GLib.spawn_command_line_sync(`chmod 700 ${dir}`);
+    }
 });

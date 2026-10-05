@@ -39,8 +39,7 @@ class NetworkPage extends Adw.PreferencesPage {
         this._interfaceRow = new Adw.ComboRow({
             title: _('Interface'),
             subtitle: _('Always measure this interface'),
-            model: Gtk.StringList.new(this._names.map(name =>
-                `${name} (${TYPE_LABELS[classifyInterface(name)]()})`)),
+            model: Gtk.StringList.new(this._names),
             selected: Math.max(0, this._names.indexOf(chosen)),
             sensitive: chosen !== '' && this._names.length > 0,
         });
@@ -50,13 +49,29 @@ class NetworkPage extends Adw.PreferencesPage {
 
         this.add(group(_('Monitored Interface'), [this._autoRow, this._interfaceRow]));
 
+        this._labelInterfaces().catch(e => console.warn('[NetPulse] Cannot classify interfaces:', e));
+
         this.add(group(_('Troubleshooting'), [
             switchRow(settings, 'debug-logging', _('Debug Logging'),
                 _('Write detailed diagnostics to the system journal')),
         ]));
     }
 
+    // Adds each interface's type ("wlo1 (Wi-Fi)") once it is known.
+    async _labelInterfaces() {
+        const types = await Promise.all(this._names.map(name => classifyInterface(name)));
+        const labels = this._names.map((name, i) => `${name} (${TYPE_LABELS[types[i]]()})`);
+        // Replacing the items must not count as the user picking another one.
+        this._relabeling = true;
+        const selected = this._interfaceRow.selected;
+        this._interfaceRow.model.splice(0, labels.length, labels);
+        this._interfaceRow.selected = selected;
+        this._relabeling = false;
+    }
+
     _apply() {
+        if (this._relabeling)
+            return;
         const auto = this._autoRow.active || this._names.length === 0;
         this._interfaceRow.sensitive = !auto;
         const value = auto ? '' : this._names[this._interfaceRow.selected] ?? '';

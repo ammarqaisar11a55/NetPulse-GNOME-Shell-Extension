@@ -5,7 +5,6 @@
 // and it notifies us on every change, so no polling is needed.
 
 import GLib from 'gi://GLib';
-import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 import NM from 'gi://NM';
 
@@ -15,8 +14,6 @@ import {
     InterfaceType, ConnectionState, TETHERING_DRIVERS, MOBILE_DRIVERS,
     makeNetworkInfo, sameNetworkInfo,
 } from './InterfaceTypes.js';
-
-Gio._promisify(NM.Client, 'new_async');
 
 // Network changes arrive as bursts of property notifications; settle first.
 const SETTLE_DELAY_MS = 250;
@@ -216,7 +213,15 @@ export class NMBackend extends EventEmitter {
      */
     static async create() {
         try {
-            const client = await NM.Client.new_async(null);
+            const client = await new Promise((resolve, reject) => {
+                NM.Client.new_async(null, (_source, result) => {
+                    try {
+                        resolve(NM.Client.new_finish(result));
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            });
             return new NMBackend(client);
         } catch (e) {
             Logger.info('NetworkManager unavailable, using kernel detection:', e.message);

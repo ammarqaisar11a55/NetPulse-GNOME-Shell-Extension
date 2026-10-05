@@ -131,15 +131,15 @@ test('findIPv6Address returns compressed global addresses only', () => {
     assertEqual(findIPv6Address('lo', IF_INET6), null);
 });
 
-test('classifyInterface recognizes interface kinds from sysfs', () => {
+test('classifyInterface recognizes interface kinds from sysfs', async () => {
     const {sysRoot} = makeFakeSystem();
-    assertEqual(classifyInterface('wlp2s0', sysRoot), 'wifi');
-    assertEqual(classifyInterface('enp3s0', sysRoot), 'ethernet');
-    assertEqual(classifyInterface('tun0', sysRoot), 'vpn');
-    assertEqual(classifyInterface('wg0', sysRoot), 'vpn');
-    assertEqual(classifyInterface('usb0', sysRoot), 'usb-tethering');
-    assertEqual(classifyInterface('veth9', sysRoot), 'other');
-    assertEqual(classifyInterface('ppp0', sysRoot), 'mobile');
+    assertEqual(await classifyInterface('wlp2s0', sysRoot), 'wifi');
+    assertEqual(await classifyInterface('enp3s0', sysRoot), 'ethernet');
+    assertEqual(await classifyInterface('tun0', sysRoot), 'vpn');
+    assertEqual(await classifyInterface('wg0', sysRoot), 'vpn');
+    assertEqual(await classifyInterface('usb0', sysRoot), 'usb-tethering');
+    assertEqual(await classifyInterface('veth9', sysRoot), 'other');
+    assertEqual(await classifyInterface('ppp0', sysRoot), 'mobile');
 });
 
 test('listInterfaces excludes loopback', () => {
@@ -148,8 +148,8 @@ test('listInterfaces excludes loopback', () => {
     assertEqual(listInterfaces('/nonexistent'), []);
 });
 
-test('detectKernelNetwork prefers wired over Wi-Fi by metric', () => {
-    const info = detectKernelNetwork(makeFakeSystem());
+test('detectKernelNetwork prefers wired over Wi-Fi by metric', async () => {
+    const info = await detectKernelNetwork(makeFakeSystem());
     assertEqual(info.name, 'enp3s0');
     assertEqual(info.type, 'ethernet');
     assertEqual(info.state, 'connected');
@@ -158,39 +158,39 @@ test('detectKernelNetwork prefers wired over Wi-Fi by metric', () => {
     assertEqual(info.vpn, {name: 'tun0', iface: 'tun0'});
 });
 
-test('detectKernelNetwork skips interfaces whose link is down', () => {
-    const info = detectKernelNetwork(makeFakeSystem({ethOperstate: 'down'}));
+test('detectKernelNetwork skips interfaces whose link is down', async () => {
+    const info = await detectKernelNetwork(makeFakeSystem({ethOperstate: 'down'}));
     assertEqual(info.name, 'wlp2s0');
     assertEqual(info.type, 'wifi');
     assertEqual(info.ipv6, '2001:db8::42');
 });
 
-test('detectKernelNetwork reports disconnected without default routes', () => {
+test('detectKernelNetwork reports disconnected without default routes', async () => {
     const roots = makeFakeSystem({route: 'header\n'});
     writeFile(`${roots.procRoot}/net/ipv6_route`, '');
-    const info = detectKernelNetwork(roots);
+    const info = await detectKernelNetwork(roots);
     assertEqual(info.name, null);
     assertEqual(info.state, 'disconnected');
 });
 
-test('detectKernelNetwork survives a missing procfs', () => {
-    const info = detectKernelNetwork({procRoot: '/nonexistent', sysRoot: '/nonexistent'});
+test('detectKernelNetwork survives a missing procfs', async () => {
+    const info = await detectKernelNetwork({procRoot: '/nonexistent', sysRoot: '/nonexistent'});
     assertEqual(info.name, null);
 });
 
-test('detectKernelNetwork uses Wi-Fi when it is the only route', () => {
-    const info = detectKernelNetwork(makeFakeSystem({route: ROUTE_WIFI_ONLY}));
+test('detectKernelNetwork uses Wi-Fi when it is the only route', async () => {
+    const info = await detectKernelNetwork(makeFakeSystem({route: ROUTE_WIFI_ONLY}));
     assertEqual(info.name, 'wlp2s0');
 });
 
-test('detectKernelNetwork describes a manually chosen interface', () => {
+test('detectKernelNetwork describes a manually chosen interface', async () => {
     const roots = makeFakeSystem({ethOperstate: 'down'});
-    const wifi = detectKernelNetwork({...roots, manualInterface: 'wlp2s0'});
+    const wifi = await detectKernelNetwork({...roots, manualInterface: 'wlp2s0'});
     assertEqual([wifi.name, wifi.type, wifi.state, wifi.source], ['wlp2s0', 'wifi', 'connected', 'manual']);
 
-    const unplugged = detectKernelNetwork({...roots, manualInterface: 'enp3s0'});
+    const unplugged = await detectKernelNetwork({...roots, manualInterface: 'enp3s0'});
     assertEqual([unplugged.name, unplugged.state], ['enp3s0', 'disconnected'], 'link is down');
 
-    const missing = detectKernelNetwork({...roots, manualInterface: 'eth9'});
+    const missing = await detectKernelNetwork({...roots, manualInterface: 'eth9'});
     assertEqual([missing.name, missing.state, missing.source], [null, 'disconnected', 'manual']);
 });

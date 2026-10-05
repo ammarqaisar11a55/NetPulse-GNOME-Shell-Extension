@@ -2,9 +2,12 @@
 //
 // Writes go to a temporary file that is renamed over the old one, so a
 // crash or power loss leaves either the previous or the new file, never a
-// truncated one. Once per day a backup copy is kept as well; it is used if
+// truncated one. Reading and regular saves are asynchronous, so a slow disk
+// never stalls GNOME Shell; only the final save at logout is synchronous,
+// because the process exits right after. Once per day a backup copy is kept as well; it is used if
 // the main file is ever unreadable.
 
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import * as Logger from '../utils/Logger.js';
@@ -119,11 +122,11 @@ export class UsageStorage {
 
     /**
      * @param {string} path - file to parse
-     * @returns {UsageData|null} data, or null if the file does not exist
+     * @returns {Promise<UsageData|null>} data, or null if the file does not exist
      * @throws {Error} if the file exists but is corrupt
      */
-    _read(path) {
-        const text = readText(path);
+    async _read(path) {
+        const text = await readText(path);
         if (text === null)
             return null;
         return sanitize(JSON.parse(text));
@@ -133,12 +136,12 @@ export class UsageStorage {
      * Loads usage data, recovering from the backup if the main file is
      * corrupt. Never throws.
      *
-     * @returns {UsageData}
+     * @returns {Promise<UsageData>}
      */
-    load() {
+    async load() {
         this._recovered = false;
         try {
-            const data = this._read(this._path);
+            const data = await this._read(this._path);
             if (data) {
                 Logger.info('Usage data loaded');
                 return data;
@@ -152,7 +155,7 @@ export class UsageStorage {
         }
 
         try {
-            const backup = this._read(this._backupPath);
+            const backup = await this._read(this._backupPath);
             if (backup) {
                 Logger.info('Usage data restored from backup');
                 return backup;
@@ -171,30 +174,108 @@ export class UsageStorage {
     }
 
     /**
+     * Saves asynchronously. Saves are queued, so they never overlap.
+     *
+     * @param {UsageData} data - data to persist
+     * @param {string} today - current "YYYY-MM-DD", to rotate the backup daily
+     * @returns {Promise<boolean>} whether the data was written
+     */
+    save(data, today) {
+        const json = JSON.stringify(data);
+        const run = () => this._saveAsync(json, today);
+        this._queue = (this._queue ?? Promise.resolve()).then(run, run);
+        return this._queue;
+    }
+
+    async _saveAsync(json, today) {
+        try {
+            GLib.mkdir_with_parents(GLib.path_get_dirname(this._path), 0o700);
+            if (this._lastBackupDay !== today) {
+                await writeAsync(this._backupPath, json);
+                this._lastBackupDay = today;
+            }
+            await writeAsync(this._path, json);
+            Logger.resolved('save', 'Usage data can be saved again');
+            return true;
+        } catch (e) {
+            return this._saveFailed(e);
+        }
+    }
+
+    /**
+     * Saves synchronously; only for the final save when the session ends.
+     *
      * @param {UsageData} data - data to persist
      * @param {string} today - current "YYYY-MM-DD", to rotate the backup daily
      * @returns {boolean} whether the data was written
      */
-    save(data, today) {
+    saveSync(data, today) {
         const json = JSON.stringify(data);
         try {
             GLib.mkdir_with_parents(GLib.path_get_dirname(this._path), 0o700);
             if (this._lastBackupDay !== today) {
-                this._write(this._backupPath, json);
+                writeSync(this._backupPath, json);
                 this._lastBackupDay = today;
             }
-            this._write(this._path, json);
+            writeSync(this._path, json);
             Logger.resolved('save', 'Usage data can be saved again');
             return true;
         } catch (e) {
-            // Retried every minute; say so once rather than every time.
-            Logger.warnOnce('save', `Cannot save usage data to ${this._path}: ${e.message}`);
-            return false;
+            return this._saveFailed(e);
         }
     }
 
-    _write(path, text) {
-        GLib.file_set_contents_full(path, new TextEncoder().encode(text),
-            GLib.FileSetContentsFlags.CONSISTENT, 0o600);
+    _saveFailed(e) {
+        // Retried every minute; say so once rather than every time.
+        Logger.warnOnce('save', `Cannot save usage data to ${this._path}: ${e.message}`);
+        return false;
     }
+}
+
+/**
+ * @param {string} path - file to write
+ * @param {string} text - contents
+ */
+function writeSync(path, text) {
+    GLib.file_set_contents_full(path, new TextEncoder().encode(text),
+        GLib.FileSetContentsFlags.CONSISTENT, 0o600);
+}
+
+/**
+ * Replaces a file asynchronously and atomically, readable only by the user:
+ * the data goes to a temporary file that is then renamed over the target.
+ * (Gio's own replace silently falls back to rewriting the file in place when
+ * it cannot create a temporary file, which is not crash-safe.)
+ *
+ * @param {string} path - file to write
+ * @param {string} text - contents
+ * @returns {Promise<void>}
+ */
+async function writeAsync(path, text) {
+    const target = Gio.File.new_for_path(path);
+    const temp = Gio.File.new_for_path(`${path}.tmp`);
+    const bytes = new GLib.Bytes(new TextEncoder().encode(text));
+    await new Promise((resolve, reject) => {
+        temp.replace_contents_bytes_async(bytes, null, false,
+            Gio.FileCreateFlags.PRIVATE | Gio.FileCreateFlags.REPLACE_DESTINATION, null,
+            (file, result) => {
+                try {
+                    file.replace_contents_finish(result);
+                    resolve();
+                } catch (e) {
+                    reject(e);
+                }
+            });
+    });
+    await new Promise((resolve, reject) => {
+        temp.move_async(target, Gio.FileCopyFlags.OVERWRITE, GLib.PRIORITY_DEFAULT, null, null,
+            (file, result) => {
+                try {
+                    file.move_finish(result);
+                    resolve();
+                } catch (e) {
+                    reject(e);
+                }
+            });
+    });
 }

@@ -12,6 +12,7 @@ import GLib from 'gi://GLib';
 
 import {EventEmitter} from '../utils/Signals.js';
 import * as Logger from '../utils/Logger.js';
+import {readText} from '../utils/Files.js';
 import {emptyData} from './UsageStorage.js';
 import {dayKey, monthKey, periodTotals, dailySeries, hourlySeries} from './UsageStatistics.js';
 
@@ -21,15 +22,10 @@ export const DEFAULT_RETENTION_DAYS = 365;
 const HOURLY_RETENTION_DAYS = 7;
 
 /**
- * @returns {string} identifier of the current boot
+ * @returns {Promise<string>} identifier of the current boot
  */
-export function readBootId() {
-    try {
-        const [, bytes] = GLib.file_get_contents('/proc/sys/kernel/random/boot_id');
-        return new TextDecoder().decode(bytes).trim();
-    } catch {
-        return 'unknown';
-    }
+export async function readBootId() {
+    return (await readText('/proc/sys/kernel/random/boot_id'))?.trim() || 'unknown';
 }
 
 export class UsageTracker extends EventEmitter {
@@ -37,8 +33,10 @@ export class UsageTracker extends EventEmitter {
      * @param {object} options - options
      * @param {import('./UsageStorage.js').UsageStorage|null} options.storage -
      *   persistence; null keeps data in memory only
-     * @param {string} options.bootId - identifier of the current boot
-     * @param {string} options.sessionId - identifier of the login session
+     * @param {string} [options.bootId] - identifier of the current boot (or
+     *   pass it to load())
+     * @param {string} [options.sessionId] - identifier of the login session
+     *   (or pass it to load())
      * @param {number} [options.weekStart] - first day of the week (0 = Sunday)
      * @param {number} [options.retentionDays] - days of history to keep
      * @param {() => import('gi://GLib').default.DateTime} [options.clock] - time source
@@ -82,35 +80,45 @@ export class UsageTracker extends EventEmitter {
         return this._data;
     }
 
-    /** Loads persisted data; call once before adding traffic. */
-    load() {
-        this._data = this._storage?.load() ?? emptyData();
+    /**
+     * Loads persisted data; traffic is only recorded once this is done.
+     *
+     * @param {object} [ids] - identity of this boot and login session
+     * @param {string} [ids.bootId] - identifier of the current boot
+     * @param {string} [ids.sessionId] - identifier of the login session
+     */
+    async load({bootId, sessionId} = {}) {
+        this._bootId = bootId ?? this._bootId;
+        this._sessionId = sessionId ?? this._sessionId;
+        this._data = (await this._storage?.load()) ?? emptyData();
         if (this._data.session?.id !== this._sessionId) {
             this._data.session = {id: this._sessionId, rx: 0, tx: 0};
             this._dirty = true;
         }
         this._prune();
+        this._loaded = true;
         // The corrupt file was moved aside; write the recovered data now.
         if (this._storage?.recovered) {
             this._dirty = true;
-            this.save();
+            await this.save();
         }
+        this.emit('changed');
     }
 
     /**
      * Adds traffic that happened while we were not running, using the
      * counters stored with the last save.
      *
-     * @param {(iface: string) => {rx: number, tx: number}|null} readCounters -
+     * @param {(iface: string) => Promise<{rx: number, tx: number}|null>} readCounters -
      *   reads the current kernel counters of an interface
-     * @returns {{rx: number, tx: number}|null} bytes recovered
+     * @returns {Promise<{rx: number, tx: number}|null>} bytes recovered
      */
-    catchUp(readCounters) {
+    async catchUp(readCounters) {
         const stored = this._data.counters;
         if (!this._enabled || !stored || stored.bootId !== this._bootId)
             return null;
 
-        const now = readCounters(stored.iface);
+        const now = await readCounters(stored.iface);
         if (!now || now.rx < stored.rx || now.tx < stored.tx)
             return null;
 
@@ -128,6 +136,8 @@ export class UsageTracker extends EventEmitter {
      *   counters after this traffic
      */
     add(rx, tx, counters) {
+        if (!this._loaded)
+            return;
         if (counters) {
             const previous = this._data.counters;
             this._data.counters = {bootId: this._bootId, ...counters};
@@ -207,7 +217,7 @@ export class UsageTracker extends EventEmitter {
             return;
         this._data.alerts = state;
         this._dirty = true;
-        this.save();
+        Logger.guard('saving usage data', () => this.save());
     }
 
     /** @param {number} weekStart - first day of the week (0 = Sunday) */
@@ -251,7 +261,7 @@ export class UsageTracker extends EventEmitter {
         this._data.resetAt = requestedAt;
         this._data.session = {id: this._sessionId, rx: 0, tx: 0};
         this._dirty = true;
-        this.save();
+        Logger.guard('saving usage data', () => this.save());
         this.emit('changed');
         Logger.info('Usage statistics reset');
     }
@@ -280,11 +290,27 @@ export class UsageTracker extends EventEmitter {
         }
     }
 
-    /** Writes pending changes now. */
-    save() {
+    /**
+     * Writes pending changes (asynchronously).
+     *
+     * @returns {Promise<boolean>} whether everything is saved
+     */
+    async save() {
+        if (!this._dirty || !this._storage)
+            return true;
+        // Changes made while the write is in flight mark the data dirty again.
+        this._dirty = false;
+        const ok = await this._storage.save(this._data, dayKey(this._clock()));
+        if (!ok)
+            this._dirty = true;
+        return ok;
+    }
+
+    /** Writes pending changes synchronously; for when the session ends. */
+    saveSync() {
         if (!this._dirty || !this._storage)
             return;
-        if (this._storage.save(this._data, dayKey(this._clock())))
+        if (this._storage.saveSync(this._data, dayKey(this._clock())))
             this._dirty = false;
     }
 
@@ -297,13 +323,17 @@ export class UsageTracker extends EventEmitter {
         });
     }
 
-    /** Saves pending changes and stops. */
+    /**
+     * Saves pending changes and stops.
+     *
+     * @returns {Promise<boolean>} resolves once the final save is done
+     */
     destroy() {
         if (this._saveTimerId) {
             GLib.source_remove(this._saveTimerId);
             this._saveTimerId = 0;
         }
-        this.save();
         this.disconnectAll();
+        return Logger.guard('saving usage data', () => this.save(), Promise.resolve(false));
     }
 }

@@ -59,9 +59,10 @@ export function resolved(key, ...args) {
 }
 
 /**
- * Runs a callback, logging instead of propagating exceptions. Used for
- * timer callbacks: GJS removes a source whose callback throws, which would
- * silently stop monitoring for the rest of the session.
+ * Runs a callback, logging instead of propagating exceptions; for async
+ * callbacks, rejections are logged too. Used for timer callbacks: GJS
+ * removes a source whose callback throws, which would silently stop
+ * monitoring for the rest of the session.
  *
  * @param {string} context - what the callback does, for the log
  * @param {Function} callback - callback to run
@@ -69,10 +70,14 @@ export function resolved(key, ...args) {
  * @returns {any} the callback's result, or the fallback
  */
 export function guard(context, callback, fallback) {
+    const report = e => warnOnce(`exception:${context}`, `Unexpected error while ${context}:`, e);
     try {
-        return callback();
+        const result = callback();
+        if (typeof result?.catch === 'function')
+            result.catch(report);
+        return result;
     } catch (e) {
-        warnOnce(`exception:${context}`, `Unexpected error while ${context}:`, e);
+        report(e);
         return fallback;
     }
 }
