@@ -5,3 +5,4 @@ __pycache__/
 schemas/gschemas.compiled
 *.shell-extension.zip
 test-output/
+docs/screenshots/desktop-*.png

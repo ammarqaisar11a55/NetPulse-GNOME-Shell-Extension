@@ -74,15 +74,15 @@ screenshot_area() {
         echo "  saved $OUTPUT/$1.png"
 }
 
-# Screenshots the on-screen area of an actor, with a margin.
-# Usage: screenshot_actor <name> <np_eval expression yielding a Clutter.Actor>
+# Screenshots the on-screen area of an actor, with a margin (default 8).
+# Usage: screenshot_actor <name> <np_eval expression yielding a Clutter.Actor> [margin]
 screenshot_actor() {
-    local box
+    local box m="${3:-8}"
     box="$(np_eval "(a => { const [x, y] = a.get_transformed_position(); const [w, h] = a.get_transformed_size(); \
         return [x, y, w, h].map(Math.round).join(' '); })($2)")"
     # shellcheck disable=SC2086
     set -- "$1" ${box//\"/}
-    screenshot_area "$1" "$(( $2 > 8 ? $2 - 8 : 0 ))" "$(( $3 > 8 ? $3 - 8 : 0 ))" "$(( $4 + 16 ))" "$(( $5 + 16 ))"
+    screenshot_area "$1" "$(( $2 > m ? $2 - m : 0 ))" "$(( $3 > m ? $3 - m : 0 ))" "$(( $4 + 2 * m ))" "$(( $5 + 2 * m ))"
 }
 
 # Clicks at stage coordinates with a virtual pointer. The pointer moves
