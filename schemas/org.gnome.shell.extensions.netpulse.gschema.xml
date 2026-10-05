@@ -17,6 +17,11 @@
     <value nick="right" value="2"/>
   </enum>
 
+  <enum id="org.gnome.shell.extensions.netpulse.PopupTheme">
+    <value nick="system" value="0"/>
+    <value nick="light" value="1"/>
+    <value nick="dark" value="2"/>
+  </enum>
   <enum id="org.gnome.shell.extensions.netpulse.HistoryRange">
     <value nick="live" value="0"/>
     <value nick="today" value="1"/>
@@ -120,6 +125,11 @@
     </key>
 
     <!-- Popup -->
+    <key name="popup-theme" enum="org.gnome.shell.extensions.netpulse.PopupTheme">
+      <default>'system'</default>
+      <summary>Popup style</summary>
+      <description>Whether the popup follows the system's light or dark style, or always uses one of them.</description>
+    </key>
     <key name="history-range" enum="org.gnome.shell.extensions.netpulse.HistoryRange">
       <default>'today'</default>
       <summary>History range</summary>

@@ -54,7 +54,7 @@ expect_eq "bits" "$(show 4820000 1210000)" '"↓ 38.6 Mbps  ↑ 9.68 Mbps"'
 np_reset use-bits
 
 np_eval 'ext._indicator.setOnline(false)' >/dev/null
-expect_eq "offline is dimmed" "$(np_eval 'ext._indicator._box.opacity')" 128
+expect_true "offline is dimmed" wait_for 128 'ext._indicator._box.opacity'
 expect_eq "offline accessible name" "$(np_eval 'ext._indicator.accessible_name')" '"Offline"'
 np_eval 'ext._indicator.setOnline(true)' >/dev/null
 

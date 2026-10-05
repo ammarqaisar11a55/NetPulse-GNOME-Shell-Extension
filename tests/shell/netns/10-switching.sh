@@ -32,7 +32,7 @@ start_peak() {
 peak() { np_eval 'Math.round(globalThis._npPeak)'; }
 
 expect_eq "starts offline" "$(iface)" null
-expect_eq "panel is dimmed while offline" "$(np_eval 'ext._indicator._box.opacity')" 128
+expect_true "panel is dimmed while offline" wait_for 128 'ext._indicator._box.opacity'
 
 # Ethernet comes up.
 unshare --net sleep 600 &
@@ -46,7 +46,7 @@ ip addr add 10.10.0.2/24 dev np-eth
 ip link set np-eth up
 ip route add default via 10.10.0.1 dev np-eth metric 100
 expect_true "Ethernet is detected" wait_for '"np-eth"' 'ext._interfaceMonitor.info.name'
-expect_eq "panel is bright when online" "$(np_eval 'ext._indicator._box.opacity')" 255
+expect_true "panel fades in when online" wait_for 255 'ext._indicator._box.opacity'
 expect_eq "speed is measured on Ethernet" "$(np_eval 'ext._speedMonitor.iface')" '"np-eth"'
 
 rx0="$(today rx)"

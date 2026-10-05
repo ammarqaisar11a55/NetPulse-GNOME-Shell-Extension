@@ -99,6 +99,7 @@
 }
 
 .netpulse-status {
+  transition-duration: 200ms;
   font-size: 0.8em;
   font-weight: bold;
   padding: 3px 10px;
@@ -160,6 +161,7 @@
 }
 
 .netpulse-tab {
+  transition-duration: 150ms;
   font-size: 0.85em;
   padding: 3px 6px;
   border-radius: 999px;
@@ -219,4 +221,100 @@
 .netpulse-footer-button {
   padding: 6px 12px;
   border-radius: 999px;
+}
+
+/* ---- Forced popup style ------------------------------------------------- */
+/* With "Popup Style" set to Light or Dark, the popup uses that variant even
+ * when the shell uses the other one. Colors mirror GNOME Shell 50's own
+ * light and dark popup palettes. */
+
+.netpulse-force-light {
+  color: #222226;
+}
+
+.netpulse-force-light .popup-menu-content {
+  background-color: #fafafb;
+  border: 1px solid #e6e6eb;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+}
+
+.netpulse-force-light .popup-menu-item {
+  color: #222226;
+}
+
+.netpulse-force-light .popup-menu-item:hover,
+.netpulse-force-light .popup-menu-item:selected,
+.netpulse-force-light .popup-menu-item:checked {
+  color: #222226;
+  background-color: st-darken(#ececf0, 7%);
+}
+
+.netpulse-force-light .popup-menu-item:active {
+  background-color: st-darken(#ececf0, 9%);
+}
+
+.netpulse-force-light .popup-separator-menu-item-separator {
+  background-color: rgba(34, 34, 38, 0.15);
+}
+
+.netpulse-force-light .popup-sub-menu {
+  background-color: #cacad4;
+}
+
+.netpulse-force-light .button {
+  color: #222226;
+  background-color: st-mix(#222226, #fafafb, 12%);
+}
+
+.netpulse-force-light .button:hover {
+  background-color: st-darken(st-mix(#222226, #fafafb, 12%), 4%);
+}
+
+.netpulse-force-dark {
+  color: #ffffff;
+}
+
+.netpulse-force-dark .popup-menu-content {
+  background-color: #36363a;
+  border: 1px solid #424247;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+}
+
+.netpulse-force-dark .popup-menu-item {
+  color: #ffffff;
+}
+
+.netpulse-force-dark .popup-menu-item:hover,
+.netpulse-force-dark .popup-menu-item:selected,
+.netpulse-force-dark .popup-menu-item:checked {
+  color: #ffffff;
+  background-color: st-lighten(#424247, 7%);
+}
+
+.netpulse-force-dark .popup-menu-item:active {
+  background-color: st-lighten(#424247, 9%);
+}
+
+.netpulse-force-dark .popup-separator-menu-item-separator {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.netpulse-force-dark .popup-sub-menu {
+  background-color: #56565c;
+}
+
+.netpulse-force-dark .button {
+  color: #ffffff;
+  background-color: st-mix(#ffffff, #36363a, 9%);
+}
+
+.netpulse-force-dark .button:hover {
+  background-color: st-lighten(st-mix(#ffffff, #36363a, 9%), 4%);
+}
+
+/* The selected history tab keeps the accent in both forced styles. */
+.netpulse-force-light .netpulse-tab:checked,
+.netpulse-force-dark .netpulse-tab:checked {
+  color: -st-accent-fg-color;
+  background-color: -st-accent-color;
 }

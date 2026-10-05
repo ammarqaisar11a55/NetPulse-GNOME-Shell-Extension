@@ -36,8 +36,9 @@ np_eval 'ext._speedMonitor._stopTimer()' >/dev/null
 expect_eq "alerts are not repeated after a restart" "$(count)" 0
 
 np_set monthly-limit 1
-expect_eq "crossing both monthly thresholds shows one alert" "$(notifications)" \
-    '"Monthly data limit reached | You’ve used 1.10 GB this month, reaching your monthly limit of 1.00 GB."'
+# (Re-enabling recovered some real background traffic, so the exact amount varies.)
+expect_true "crossing both monthly thresholds shows one alert" grep -qE \
+    '^"Monthly data limit reached \| You’ve used 1\.[0-9]{2} GB this month, reaching your monthly limit of 1\.00 GB\."$' <<<"$(notifications)"
 
 dismiss
 np_set usage-notifications false

@@ -37,6 +37,14 @@ class DisplayPage extends Adw.PreferencesPage {
                 _('Use 1024-based units (KiB, MiB, GiB) instead of 1000-based units')),
         ]));
 
+        this.add(group(_('Appearance'), [
+            comboRow(settings, 'popup-theme', _('Popup Style'), _('The top bar always follows the system style'), [
+                ['system', _('Follow System')],
+                ['light', _('Light')],
+                ['dark', _('Dark')],
+            ]),
+        ]));
+
         this.add(group(_('Updates'), [
             spinRow(settings, 'refresh-interval', _('Refresh Interval'),
                 _('Seconds between speed measurements'), {lower: 0.5, upper: 10, step: 0.5, digits: 1}),

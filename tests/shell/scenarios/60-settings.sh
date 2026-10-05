@@ -46,7 +46,7 @@ expect_eq "source shows the manual choice" "$(np_eval 'ext._interfaceMonitor.inf
 np_set manual-interface "'np-missing0'"
 sleep 0.5
 expect_eq "missing chosen interface means offline" "$(np_eval 'ext._speedMonitor.iface')" null
-expect_eq "panel is dimmed" "$(np_eval 'ext._indicator._box.opacity')" 128
+expect_true "panel is dimmed" wait_for 128 'ext._indicator._box.opacity'
 np_reset manual-interface
 sleep 0.5
 expect_eq "automatic detection resumes" "$(np_eval 'ext._interfaceMonitor.info.name')" "$auto_iface"

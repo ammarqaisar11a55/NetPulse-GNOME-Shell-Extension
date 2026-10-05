@@ -110,6 +110,22 @@ window_rect() {
     echo "${r//\"/}"
 }
 
+# Waits until a window is mapped and placed (new windows briefly sit at the
+# origin before being centered) and prints its rect, or nothing on timeout.
+wait_window() {
+    local r previous=""
+    for _ in $(seq 80); do
+        r="$(window_rect "$1")"
+        if [[ -n "$r" && "$r" != "0 0 "* && "$r" == "$previous" ]]; then
+            echo "$r"
+            return 0
+        fi
+        previous="$r"
+        sleep 0.25
+    done
+    return 1
+}
+
 # Changes a NetPulse setting: np_set <key> <gvariant-value>
 np_set() {
     gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.netpulse "$1" "$2"

@@ -12,6 +12,7 @@ import {panelSegments} from './PanelText.js';
 import {speedUnitCandidates, VALUE_WIDTH_TEMPLATES} from '../utils/Formatters.js';
 
 const OFFLINE_OPACITY = 128;
+const FADE_DURATION_MS = 250;
 
 /**
  * Reserves the width of the widest text a label can show, so changing
@@ -123,7 +124,11 @@ class PanelIndicator extends PanelMenu.Button {
         if (online === this._online)
             return;
         this._online = online;
-        this._box.opacity = online ? 255 : OFFLINE_OPACITY;
+        this._box.ease({
+            opacity: online ? 255 : OFFLINE_OPACITY,
+            duration: FADE_DURATION_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+        });
         this._render();
     }
 

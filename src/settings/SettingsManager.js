@@ -9,6 +9,7 @@ const GROUPS = {
     position: ['panel-position'],
     interval: ['refresh-interval'],
     history: ['history-range'],
+    appearance: ['popup-theme'],
     usage: ['usage-tracking', 'usage-retention-days'],
     reset: ['usage-reset-request'],
     network: ['manual-interface'],
@@ -57,6 +58,11 @@ export class SettingsManager extends EventEmitter {
             bits: s.get_boolean('use-bits'),
             binary: s.get_boolean('binary-units'),
         };
+    }
+
+    /** @returns {string} "system", "light" or "dark" */
+    get popupTheme() {
+        return this._settings.get_string('popup-theme');
     }
 
     /** @returns {string} "left", "center" or "right" */

@@ -39,6 +39,7 @@ export class PopupDashboard {
 
         this._menu.actor.add_style_class_name('netpulse-menu');
         this._build();
+        this._applyTheme();
 
         this._handlers = [
             [speedMonitor, speedMonitor.connect('sample', () => this._whenOpen(() => this._onSample()))],
@@ -46,11 +47,23 @@ export class PopupDashboard {
             [interfaceMonitor, interfaceMonitor.connect('changed', () => this._whenOpen(() => this._updateNetwork()))],
             [settings, settings.connect('display', () => this._whenOpen(() => this.refresh()))],
             [settings, settings.connect('history', () => this._whenOpen(() => this._historyView.refresh()))],
+            [settings, settings.connect('appearance', () => this._applyTheme())],
         ];
         this._menu.connect('open-state-changed', (_menu, open) => {
             if (open)
                 this.refresh();
         });
+    }
+
+    // "system" leaves the shell's style alone; otherwise the stylesheet's
+    // netpulse-force-* rules repaint the popup with that variant's palette.
+    _applyTheme() {
+        const actor = this._menu.actor;
+        actor.remove_style_class_name('netpulse-force-light');
+        actor.remove_style_class_name('netpulse-force-dark');
+        const theme = this._settings.popupTheme;
+        if (theme === 'light' || theme === 'dark')
+            actor.add_style_class_name(`netpulse-force-${theme}`);
     }
 
     _whenOpen(update) {
