@@ -11,15 +11,15 @@ ext_state() {
 # Evaluates JavaScript inside the shell and prints the JSON result.
 # `Main` and `global` are in scope. Fails if evaluation throws.
 shell_eval() {
-    local out ok
-    out="$(gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
-        --method org.gnome.Shell.Eval "$1")"
-    ok="${out%%,*}"
-    # Strip the GVariant tuple wrapping: (true, 'result')
-    out="${out#*, \'}"
-    out="${out%\')}"
-    echo "$out"
-    [[ "$ok" == "(true" ]]
+    # Eval returns a (success, json) tuple; let GLib parse it, since the text
+    # form quotes strings differently depending on their contents.
+    gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
+        --method org.gnome.Shell.Eval "$1" | python3 -c '
+import sys
+from gi.repository import GLib
+ok, result = GLib.Variant.parse(None, sys.stdin.read().strip(), None, None).unpack()
+print(result)
+sys.exit(0 if ok else 1)'
 }
 
 # Evaluates an expression with `ext` bound to the NetPulse extension object.
