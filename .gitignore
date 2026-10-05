@@ -1,7 +1,7 @@
-schemas/gschemas.compiled
-*.shell-extension.zip
 dist/
 node_modules/
-test-output/
-__pycache__/
 *.pyc
+__pycache__/
+schemas/gschemas.compiled
+*.shell-extension.zip
+test-output/

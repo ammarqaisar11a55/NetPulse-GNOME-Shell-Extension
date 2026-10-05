@@ -17,6 +17,14 @@ else
     status=1
 fi
 
+echo "== Installer"
+if "$ROOT/tests/install/test-install.sh" >"$OUTPUT/install.log" 2>&1; then
+    echo "all checks passed"
+else
+    grep -E "FAIL" "$OUTPUT/install.log"
+    status=1
+fi
+
 echo "== Headless GNOME Shell scenarios"
 if "$ROOT/tools/test-headless.sh" >"$OUTPUT/shell.log" 2>&1; then
     echo "all scenarios passed"

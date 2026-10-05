@@ -19,20 +19,19 @@ upload speed in the top panel and keeps track of how much data you use.
 ```bash
 git clone git@github.com:ammarqaisar11a55/NetPulse-GNOME-Shell-Extension.git
 cd NetPulse-GNOME-Shell-Extension
-
-UUID=netpulse@ammarqaisar11a55.github.io
-DEST=~/.local/share/gnome-shell/extensions/$UUID
-mkdir -p "$DEST"
-cp -r metadata.json extension.js schemas src "$DEST"/
-glib-compile-schemas "$DEST/schemas"
+./install.sh
 ```
 
-GNOME Shell only discovers new extensions at login on Wayland, so log out
-and back in, then enable it:
+The script checks your GNOME Shell version and dependencies, installs the
+extension for your user into `~/.local/share/gnome-shell/extensions/` and
+compiles its settings schema. Log out and back in (on Wayland), then:
 
 ```bash
 gnome-extensions enable netpulse@ammarqaisar11a55.github.io
 ```
+
+To remove it, run `./uninstall.sh` (add `--purge` to also delete your usage
+statistics and settings).
 
 ## Development
 

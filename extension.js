@@ -56,11 +56,11 @@ export default class NetPulseExtension extends Extension {
         });
 
         this._createIndicator();
-        this._settings.connect('display', () => this._indicator.setOptions(this._settings.display));
+        this._settings.connect('display', () => this._indicator?.setOptions(this._settings.display));
         this._settings.connect('position', () => this._createIndicator());
 
         this._speedMonitor.connect('sample', sample => {
-            this._indicator.setSample(sample);
+            this._indicator?.setSample(sample);
             this._usageTracker.add(sample.rxDelta, sample.txDelta,
                 sample.counters && {iface: sample.iface, ...sample.counters});
         });
@@ -71,10 +71,7 @@ export default class NetPulseExtension extends Extension {
         // The shell does not disable extensions when the session ends: save
         // usage and stop monitoring before teardown, so no data is lost and
         // no callbacks fire during finalization.
-        global.connectObject('shutdown', () => {
-            this._usageTracker.save();
-            this._stopMonitoring();
-        }, this);
+        global.connectObject('shutdown', () => this._onShutdown(), this);
 
         Logger.info('Enabled');
     }
@@ -116,6 +113,11 @@ export default class NetPulseExtension extends Extension {
         return tracker;
     }
 
+    _onShutdown() {
+        this._usageTracker?.save();
+        this._stopMonitoring();
+    }
+
     _stopMonitoring() {
         this._connectionNotifier?.destroy();
         this._connectionNotifier = null;
@@ -128,13 +130,25 @@ export default class NetPulseExtension extends Extension {
     _destroyIndicator() {
         this._dashboard?.destroy();
         this._dashboard = null;
-        this._indicator?.destroy();
+        const indicator = this._indicator;
         this._indicator = null;
+        indicator?.destroy();
     }
 
     _createIndicator() {
         this._destroyIndicator();
-        this._indicator = new PanelIndicator();
+        const indicator = this._indicator = new PanelIndicator();
+        // Only the shell's own teardown destroys the indicator behind our
+        // back. Its shutdown handler runs before ours, inside a main loop
+        // that still dispatches our timers, so stop right away.
+        indicator.connect('destroy', () => {
+            if (this._indicator !== indicator)
+                return;
+            this._indicator = null;
+            this._dashboard?.destroy();
+            this._dashboard = null;
+            this._onShutdown();
+        });
         this._indicator.setOptions(this._settings.display);
         if (this._speedMonitor)
             this._indicator.setSample(this._speedMonitor.current);
@@ -160,6 +174,6 @@ export default class NetPulseExtension extends Extension {
     _onNetworkChanged(info) {
         const online = isOnline(info);
         this._speedMonitor.setInterface(online ? info.name : null);
-        this._indicator.setOnline(online);
+        this._indicator?.setOnline(online);
     }
 }

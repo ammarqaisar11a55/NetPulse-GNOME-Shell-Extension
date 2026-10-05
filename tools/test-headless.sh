@@ -48,12 +48,11 @@ unset DISPLAY WAYLAND_DISPLAY GNOME_KEYRING_CONTROL SSH_AUTH_SOCK
 export XDG_DATA_HOME="$WORK/data" XDG_CONFIG_HOME="$WORK/config" \
        XDG_CACHE_HOME="$WORK/cache" XDG_STATE_HOME="$WORK/state"
 EXT_DIR="$XDG_DATA_HOME/gnome-shell/extensions/$UUID"
-mkdir -p "$EXT_DIR"
-cp -r "$ROOT"/{metadata.json,extension.js,schemas,src} "$EXT_DIR"/
-for f in prefs.js stylesheet.css stylesheet-dark.css stylesheet-light.css; do
-    if [[ -f "$ROOT/$f" ]]; then cp "$ROOT/$f" "$EXT_DIR/"; fi
-done
-glib-compile-schemas "$EXT_DIR/schemas"
+# Install exactly as users do, from the packed bundle.
+dbus-run-session -- "$ROOT/install.sh" --quiet 2>"$WORK/install.log" || {
+    cat "$WORK/install.log"
+    exit 1
+}
 cp -r "$ROOT/tests/shell/helper" "$XDG_DATA_HOME/gnome-shell/extensions/$HELPER_UUID"
 
 LOG="$WORK/shell.log"
