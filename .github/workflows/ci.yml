@@ -22,7 +22,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             ca-certificates git gjs gir1.2-nm-1.0 libglib2.0-bin zip
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validate the settings schema
         run: glib-compile-schemas --strict --dry-run schemas
@@ -33,7 +33,7 @@ jobs:
       - name: Build the extension bundle
         run: tools/build.sh dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: extension-bundle
           path: dist/*.shell-extension.zip
@@ -51,7 +51,7 @@ jobs:
             at-spi2-core gir1.2-atspi-2.0 python3 python3-gi libgl1-mesa-dri \
             procps iproute2 zip
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Prepare a system bus and a test user
         run: |
@@ -64,11 +64,20 @@ jobs:
         run: runuser -u tester -- tests/install/test-install.sh
 
       - name: Headless GNOME Shell scenarios
-        run: runuser -u tester -- env HOME=/home/tester tools/test-headless.sh
+        run: |
+          status=0
+          runuser -u tester -- env HOME=/home/tester tools/test-headless.sh >shell-tests.log 2>&1 || status=$?
+          cat shell-tests.log
+          if [ "$status" -ne 0 ]; then
+            # Surface the failures as annotations on the run.
+            grep -E "FAIL|JS ERROR|JS WARNING|CRITICAL|ERROR \*\*|did not start" shell-tests.log |
+              head -n 10 | sed 's/^/::error::/'
+          fi
+          exit "$status"
 
       - name: Keep logs and screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: shell-test-output
           path: test-output/
