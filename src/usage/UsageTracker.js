@@ -292,7 +292,7 @@ export class UsageTracker extends EventEmitter {
         if (this._saveTimerId)
             return;
         this._saveTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, SAVE_INTERVAL_SECONDS, () => {
-            this.save();
+            Logger.guard('saving usage data', () => this.save());
             return GLib.SOURCE_CONTINUE;
         });
     }

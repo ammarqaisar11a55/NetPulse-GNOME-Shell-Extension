@@ -12,6 +12,7 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 
 import {typeLabel, networkIcon} from '../ui/Labels.js';
 import {isOnline, ConnectionState} from '../network/InterfaceTypes.js';
+import * as Logger from '../utils/Logger.js';
 
 const SETTLE_DELAY_MS = 2000;
 
@@ -77,7 +78,7 @@ export class ConnectionNotifier {
             GLib.source_remove(this._settleId);
         this._settleId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SETTLE_DELAY_MS, () => {
             this._settleId = 0;
-            this._announce();
+            Logger.guard('announcing a connection change', () => this._announce());
             return GLib.SOURCE_REMOVE;
         });
     }

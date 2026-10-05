@@ -11,6 +11,7 @@ import './unit/speedMonitor.test.js';
 import './unit/panelText.test.js';
 import './unit/usage.test.js';
 import './unit/usageAlerts.test.js';
+import './unit/errors.test.js';
 
 const loop = new GLib.MainLoop(null, false);
 let ok = false;

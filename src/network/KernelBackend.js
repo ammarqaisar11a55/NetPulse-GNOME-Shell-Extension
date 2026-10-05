@@ -15,7 +15,7 @@ import {readText, readLink, exists} from '../utils/Files.js';
 import * as Logger from '../utils/Logger.js';
 import {
     InterfaceType, ConnectionState, TETHERING_DRIVERS, MOBILE_DRIVERS,
-    makeNetworkInfo, sameNetworkInfo,
+    makeNetworkInfo, sameNetworkInfo, isValidInterfaceName,
 } from './InterfaceTypes.js';
 
 const POLL_INTERVAL_MS = 3000;
@@ -214,7 +214,7 @@ export function listInterfaces(sysRoot = '/sys/class/net') {
  * @returns {boolean} whether the interface has readable traffic counters
  */
 export function hasStatistics(iface, sysRoot = '/sys/class/net') {
-    return exists(`${sysRoot}/${iface}/statistics/rx_bytes`);
+    return isValidInterfaceName(iface) && exists(`${sysRoot}/${iface}/statistics/rx_bytes`);
 }
 
 /**
@@ -297,7 +297,7 @@ export class KernelBackend extends EventEmitter {
     start() {
         this.refresh();
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT_IDLE, POLL_INTERVAL_MS, () => {
-            this.refresh();
+            Logger.guard('reading kernel network state', () => this.refresh());
             return GLib.SOURCE_CONTINUE;
         });
         try {
@@ -313,7 +313,7 @@ export class KernelBackend extends EventEmitter {
             return;
         this._settleId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SETTLE_DELAY_MS, () => {
             this._settleId = 0;
-            this.refresh();
+            Logger.guard('reading kernel network state', () => this.refresh());
             return GLib.SOURCE_REMOVE;
         });
     }

@@ -166,7 +166,8 @@ export class UsageStorage {
     // Keep the damaged file for inspection instead of overwriting it.
     _quarantine() {
         const stamp = GLib.DateTime.new_now_local().format('%Y%m%d-%H%M%S');
-        GLib.rename(this._path, `${this._path}.corrupt-${stamp}`);
+        if (GLib.rename(this._path, `${this._path}.corrupt-${stamp}`) !== 0)
+            Logger.warn(`Cannot move the corrupt usage data aside; it will be overwritten`);
     }
 
     /**
@@ -183,9 +184,11 @@ export class UsageStorage {
                 this._lastBackupDay = today;
             }
             this._write(this._path, json);
+            Logger.resolved('save', 'Usage data can be saved again');
             return true;
         } catch (e) {
-            Logger.warn(`Cannot save usage data to ${this._path}: ${e.message}`);
+            // Retried every minute; say so once rather than every time.
+            Logger.warnOnce('save', `Cannot save usage data to ${this._path}: ${e.message}`);
             return false;
         }
     }

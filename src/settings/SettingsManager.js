@@ -2,6 +2,8 @@
 // what they affect so consumers do not track individual keys.
 
 import {EventEmitter} from '../utils/Signals.js';
+import * as Logger from '../utils/Logger.js';
+import {isValidInterfaceName} from '../network/InterfaceTypes.js';
 
 // Each group is emitted as a signal when any of its keys change.
 const GROUPS = {
@@ -92,7 +94,16 @@ export class SettingsManager extends EventEmitter {
 
     /** @returns {string|null} interface chosen by the user, or null for automatic */
     get manualInterface() {
-        return this._settings.get_string('manual-interface').trim() || null;
+        const name = this._settings.get_string('manual-interface').trim();
+        if (!name)
+            return null;
+        if (!isValidInterfaceName(name)) {
+            Logger.warnOnce('manual-interface',
+                `Ignoring invalid interface name "${name}"; detecting automatically`);
+            return null;
+        }
+        Logger.resolved('manual-interface');
+        return name;
     }
 
     /**

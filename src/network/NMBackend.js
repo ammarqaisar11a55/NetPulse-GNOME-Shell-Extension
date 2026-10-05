@@ -255,7 +255,7 @@ export class NMBackend extends EventEmitter {
             return;
         this._settleId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SETTLE_DELAY_MS, () => {
             this._settleId = 0;
-            this.refresh();
+            Logger.guard('reading NetworkManager state', () => this.refresh());
             return GLib.SOURCE_REMOVE;
         });
     }

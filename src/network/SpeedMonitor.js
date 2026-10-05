@@ -11,6 +11,7 @@ import GLib from 'gi://GLib';
 import {EventEmitter} from '../utils/Signals.js';
 import {readText} from '../utils/Files.js';
 import * as Logger from '../utils/Logger.js';
+import {isValidInterfaceName} from './InterfaceTypes.js';
 
 export const MIN_INTERVAL_MS = 500;
 export const MAX_INTERVAL_MS = 10000;
@@ -37,6 +38,8 @@ const MAX_PLAUSIBLE_RATE = 50e9;
  *   since the interface appeared, or null if unavailable
  */
 export function readCounters(iface, sysRoot = '/sys/class/net') {
+    if (!isValidInterfaceName(iface))
+        return null;
     const dir = `${sysRoot}/${iface}/statistics`;
     const rx = Number.parseInt(readText(`${dir}/rx_bytes`), 10);
     const tx = Number.parseInt(readText(`${dir}/tx_bytes`), 10);
@@ -176,7 +179,7 @@ export class SpeedMonitor extends EventEmitter {
             return;
 
         const tick = () => {
-            this._sample();
+            Logger.guard('sampling network speed', () => this._sample());
             return GLib.SOURCE_CONTINUE;
         };
         // Whole-second intervals use the seconds API, which lets GLib batch
@@ -198,14 +201,14 @@ export class SpeedMonitor extends EventEmitter {
         if (!counters) {
             // An unplugged interface vanishes a moment before detection
             // notices; only a lasting failure is worth a warning.
-            if (++this._readFailures === PERSISTENT_READ_FAILURES)
-                Logger.warn(`Cannot read traffic counters of ${this._iface}`);
+            if (++this._readFailures >= PERSISTENT_READ_FAILURES)
+                Logger.warnOnce(`counters:${this._iface}`, `Cannot read traffic counters of ${this._iface}`);
             this._calculator.reset();
             this._publish(this._zeroSample());
             return;
         }
-        if (this._readFailures >= PERSISTENT_READ_FAILURES)
-            Logger.info(`Traffic counters of ${this._iface} readable again`);
+        if (this._readFailures > 0)
+            Logger.resolved(`counters:${this._iface}`, `Traffic counters of ${this._iface} readable again`);
         this._readFailures = 0;
 
         const rates = this._calculator.update(counters.rx, counters.tx, GLib.get_monotonic_time());

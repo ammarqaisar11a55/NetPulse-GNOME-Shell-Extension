@@ -26,6 +26,17 @@ export const TETHERING_DRIVERS = new Set(['rndis_host', 'ipheth']);
 export const MOBILE_DRIVERS = new Set(['qmi_wwan', 'cdc_mbim', 'huawei_cdc_ncm']);
 
 /**
+ * Applies the kernel's rules for interface names (dev_valid_name), so a
+ * name from the settings can safely become part of a sysfs path.
+ *
+ * @param {string} name - candidate interface name
+ * @returns {boolean} whether it is a valid interface name
+ */
+export function isValidInterfaceName(name) {
+    return typeof name === 'string' && /^[^\s/:]{1,15}$/.test(name) && name !== '.' && name !== '..';
+}
+
+/**
  * Describes the current network as seen by NetPulse.
  *
  * `name` is the kernel interface whose counters are sampled. When a VPN is
