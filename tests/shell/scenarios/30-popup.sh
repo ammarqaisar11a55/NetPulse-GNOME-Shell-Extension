@@ -8,6 +8,7 @@ publish() {
 dash='ext._dashboard'
 tile() { np_eval "$dash._speedDisplay.$1.text"; }
 row() { np_eval "$dash._$1Rows.$2.value"; }
+usage() { np_eval "$dash._usageDisplay.row('$1').join(' / ')"; }
 
 np_eval "($dash._usageTracker.resetSession(), true)" >/dev/null
 np_eval 'ext._indicator.menu.open(false)' >/dev/null
@@ -22,9 +23,7 @@ expect_true "connection title is shown" test "$(np_eval "$dash._networkTitle.tex
 publish 4820000 1210000 2430000000 386000000
 expect_eq "download tile" "$(tile download)" '"4.82 MB/s"'
 expect_eq "upload tile" "$(tile upload)" '"1.21 MB/s"'
-expect_eq "session downloaded" "$(row session rx)" '"2.43 GB"'
-expect_eq "session uploaded" "$(row session tx)" '"386 MB"'
-expect_eq "session total" "$(row session total)" '"2.82 GB"'
+expect_eq "session usage" "$(usage session)" '"2.43 GB / 386 MB / 2.82 GB"'
 screenshot_actor popup-connected 'ext._indicator.menu.actor'
 
 np_set use-bits true
@@ -32,7 +31,7 @@ expect_eq "units follow settings" "$(tile download)" '"38.6 Mbps"'
 np_reset use-bits
 
 np_eval "($dash._resetButton.emit('clicked', 1), true)" >/dev/null
-expect_eq "reset session" "$(row session total)" '"0 B"'
+expect_eq "reset session" "$(usage session)" '"0 B / 0 B / 0 B"'
 
 # Disconnected and VPN states, injected through the interface monitor.
 inject() {
