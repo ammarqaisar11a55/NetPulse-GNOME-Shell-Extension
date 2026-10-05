@@ -2,6 +2,12 @@
 <schemalist gettext-domain="netpulse">
   <schema id="org.gnome.shell.extensions.netpulse"
           path="/org/gnome/shell/extensions/netpulse/">
+    <key name="refresh-interval" type="d">
+      <range min="0.5" max="10.0"/>
+      <default>1.0</default>
+      <summary>Refresh interval</summary>
+      <description>How often, in seconds, network speed is sampled.</description>
+    </key>
     <key name="debug-logging" type="b">
       <default>false</default>
       <summary>Enable debug logging</summary>

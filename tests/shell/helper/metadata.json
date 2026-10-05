@@ -1,0 +1,6 @@
+{
+  "uuid": "netpulse-test-helper@netpulse.test",
+  "name": "NetPulse test helper",
+  "description": "Test-only. Puts the throwaway headless test shell into unsafe mode so test scenarios can use org.gnome.Shell.Eval and screenshots. Never install this in a real session.",
+  "shell-version": ["50"]
+}

@@ -42,19 +42,23 @@ Run the unit tests (plain `gjs`, no dependencies):
 gjs -m tests/run.js
 ```
 
-Run the extension in an isolated, headless GNOME Shell (your real session
-and settings are untouched) and exercise the enable/disable lifecycle:
+Run the integration scenarios in `tests/shell/scenarios/` against an
+isolated, headless GNOME Shell (your real session and settings are
+untouched; screenshots land in `test-output/`):
 
 ```bash
 tools/test-headless.sh
 ```
 
-Watch what NetPulse detects on your machine, and test network switching
-inside a private network namespace (no root needed):
+Watch what NetPulse detects and measures on your machine, and test network
+switching and high-rate traffic inside private network namespaces (no root
+needed):
 
 ```bash
 gjs -m tests/live/probe-network.js 60
+gjs -m tests/live/probe-speed.js 30
 tests/live/netns-switching.sh
+tests/live/netns-traffic.sh 500
 ```
 
 To watch the logs of your real session:
