@@ -17,6 +17,13 @@
     <value nick="right" value="2"/>
   </enum>
 
+  <enum id="org.gnome.shell.extensions.netpulse.HistoryRange">
+    <value nick="live" value="0"/>
+    <value nick="today" value="1"/>
+    <value nick="week" value="2"/>
+    <value nick="month" value="3"/>
+  </enum>
+
   <schema id="org.gnome.shell.extensions.netpulse"
           path="/org/gnome/shell/extensions/netpulse/">
     <!-- Display -->
@@ -55,6 +62,13 @@
       <default>1.0</default>
       <summary>Refresh interval</summary>
       <description>How often, in seconds, network speed is sampled.</description>
+    </key>
+
+    <!-- Popup -->
+    <key name="history-range" enum="org.gnome.shell.extensions.netpulse.HistoryRange">
+      <default>'today'</default>
+      <summary>History range</summary>
+      <description>The range shown by the history chart in the popup.</description>
     </key>
 
     <!-- Diagnostics -->

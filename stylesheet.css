@@ -149,6 +149,46 @@
   padding-bottom: 3px;
 }
 
+/* History */
+.netpulse-history {
+  spacing: 4px;
+}
+
+.netpulse-tabs {
+  spacing: 4px;
+  padding-bottom: 4px;
+}
+
+.netpulse-tab {
+  font-size: 0.85em;
+  padding: 3px 6px;
+  border-radius: 999px;
+}
+
+.netpulse-tab:checked {
+  color: -st-accent-fg-color;
+  background-color: -st-accent-color;
+}
+
+.netpulse-chart {
+  height: 5em;
+  /* Read by HistoryGraph; download stands out, upload stays neutral. */
+  -netpulse-download-color: -st-accent-color;
+  -netpulse-upload-color: rgba(127, 127, 127, 0.7);
+}
+
+.netpulse-chart-scale,
+.netpulse-chart-axis-label {
+  font-size: 0.75em;
+  font-feature-settings: "tnum";
+}
+
+.netpulse-chart-summary {
+  font-size: 0.85em;
+  font-feature-settings: "tnum";
+  padding-top: 2px;
+}
+
 /* Usage table */
 .netpulse-usage-header {
   font-size: 0.8em;

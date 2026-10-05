@@ -13,6 +13,7 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 import {StatRow, section, label, DIM_OPACITY} from './Widgets.js';
 import {SpeedDisplay} from './SpeedDisplay.js';
 import {UsageDisplay} from './UsageDisplay.js';
+import {HistoryView} from './HistoryView.js';
 import {typeLabel, stateLabel, networkIcon} from './Labels.js';
 import {ConnectionState} from '../network/InterfaceTypes.js';
 
@@ -38,10 +39,11 @@ export class PopupDashboard {
         this._build();
 
         this._handlers = [
-            [speedMonitor, speedMonitor.connect('sample', () => this._whenOpen(() => this._updateSpeed()))],
-            [usageTracker, usageTracker.connect('changed', () => this._whenOpen(() => this._updateUsage()))],
+            [speedMonitor, speedMonitor.connect('sample', () => this._whenOpen(() => this._onSample()))],
+            [usageTracker, usageTracker.connect('changed', () => this._whenOpen(() => this._onUsageChanged()))],
             [interfaceMonitor, interfaceMonitor.connect('changed', () => this._whenOpen(() => this._updateNetwork()))],
             [settings, settings.connect('display', () => this._whenOpen(() => this.refresh()))],
+            [settings, settings.connect('history', () => this._whenOpen(() => this._historyView.refresh()))],
         ];
         this._menu.connect('open-state-changed', (_menu, open) => {
             if (open)
@@ -89,6 +91,14 @@ export class PopupDashboard {
         this._addBlock(this._speedDisplay);
         this._addSeparator();
 
+        this._historyView = new HistoryView({
+            usageTracker: this._usageTracker,
+            speedMonitor: this._speedMonitor,
+            settings: this._settings,
+        });
+        this._addBlock(section(_('History'), [this._historyView]));
+        this._addSeparator();
+
         this._usageDisplay = new UsageDisplay();
         this._addBlock(section(_('Usage'), [this._usageDisplay]));
         this._addSeparator();
@@ -100,7 +110,11 @@ export class PopupDashboard {
             ipv6: new StatRow(_('IPv6 Address')),
             vpn: new StatRow(_('VPN')),
         };
-        this._addBlock(section(_('Network'), Object.values(this._networkRows)));
+        // Mostly repeats the header, so it starts collapsed.
+        const details = new PopupMenu.PopupSubMenuMenuItem(_('Network Details'));
+        details.menu.box.add_child(section(null, Object.values(this._networkRows)));
+        details.menu.box.get_last_child().add_style_class_name('netpulse-block');
+        this._menu.addMenuItem(details);
         this._addSeparator();
 
         const footer = new St.BoxLayout({style_class: 'netpulse-footer', x_expand: true});
@@ -119,6 +133,19 @@ export class PopupDashboard {
         this._updateNetwork();
         this._updateSpeed();
         this._updateUsage();
+        this._historyView.refresh();
+    }
+
+    _onSample() {
+        this._updateSpeed();
+        if (this._historyView.range === 'live')
+            this._historyView.refresh();
+    }
+
+    _onUsageChanged() {
+        this._updateUsage();
+        if (this._historyView.range !== 'live')
+            this._historyView.refresh();
     }
 
     get _unitOptions() {

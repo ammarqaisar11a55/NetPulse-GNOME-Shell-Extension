@@ -8,6 +8,7 @@ const GROUPS = {
     display: ['panel-content', 'panel-style', 'show-units', 'use-bits', 'binary-units'],
     position: ['panel-position'],
     interval: ['refresh-interval'],
+    history: ['history-range'],
     debug: ['debug-logging'],
 };
 
