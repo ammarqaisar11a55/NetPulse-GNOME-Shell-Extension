@@ -50,3 +50,111 @@
   font-size: 0.72em;
   spacing: 0.25em;
 }
+
+/* ---- Popup dashboard ---------------------------------------------------- */
+
+.netpulse-menu .popup-menu-content {
+  min-width: 21em;
+}
+
+/* Content blocks are aligned with the padding of regular menu items. */
+.netpulse-block {
+  padding: 6px 12px;
+}
+
+.netpulse-section {
+  spacing: 4px;
+}
+
+.netpulse-section-title {
+  font-size: 0.8em;
+  font-weight: bold;
+  padding-bottom: 2px;
+}
+
+.netpulse-stat-row {
+  spacing: 1em;
+}
+
+.netpulse-stat-value {
+  font-feature-settings: "tnum";
+  font-weight: bold;
+}
+
+/* Header */
+.netpulse-header {
+  spacing: 12px;
+}
+
+.netpulse-header-icon {
+  icon-size: 24px;
+}
+
+.netpulse-header-title {
+  font-weight: bold;
+}
+
+.netpulse-header-subtitle {
+  font-size: 0.9em;
+}
+
+.netpulse-status {
+  font-size: 0.8em;
+  font-weight: bold;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.netpulse-status-connected {
+  color: -st-accent-fg-color;
+  background-color: -st-accent-color;
+}
+
+.netpulse-status-limited {
+  color: #000000;
+  background-color: #f6d32d;
+}
+
+.netpulse-status-connecting,
+.netpulse-status-disconnected {
+  background-color: rgba(127, 127, 127, 0.25);
+}
+
+/* Current speed */
+.netpulse-speed-display {
+  spacing: 12px;
+}
+
+.netpulse-speed-tile {
+  spacing: 2px;
+}
+
+.netpulse-speed-caption {
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+.netpulse-speed-readout {
+  spacing: 4px;
+}
+
+.netpulse-speed-value {
+  font-size: 1.7em;
+  font-weight: 800;
+  font-feature-settings: "tnum";
+}
+
+.netpulse-speed-unit {
+  font-weight: bold;
+  padding-bottom: 3px;
+}
+
+/* Footer */
+.netpulse-footer {
+  spacing: 6px;
+}
+
+.netpulse-footer-button {
+  padding: 6px 12px;
+  border-radius: 999px;
+}

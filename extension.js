@@ -6,7 +6,9 @@ import {InterfaceMonitor} from './src/network/InterfaceMonitor.js';
 import {isOnline} from './src/network/InterfaceTypes.js';
 import {SpeedMonitor} from './src/network/SpeedMonitor.js';
 import {SettingsManager} from './src/settings/SettingsManager.js';
+import {UsageTracker} from './src/usage/UsageTracker.js';
 import {PanelIndicator} from './src/ui/PanelIndicator.js';
+import {PopupDashboard} from './src/ui/PopupDashboard.js';
 
 // Index within the chosen panel box; -1 appends.
 const PANEL_SLOTS = {left: -1, center: -1, right: 0};
@@ -22,12 +24,16 @@ export default class NetPulseExtension extends Extension {
             () => this._speedMonitor?.setIntervalMs(this._settings.refreshIntervalMs));
 
         this._interfaceMonitor = new InterfaceMonitor();
+        this._usageTracker = new UsageTracker();
 
         this._createIndicator();
         this._settings.connect('display', () => this._indicator.setOptions(this._settings.display));
         this._settings.connect('position', () => this._createIndicator());
 
-        this._speedMonitor.connect('sample', sample => this._indicator.setSample(sample));
+        this._speedMonitor.connect('sample', sample => {
+            this._indicator.setSample(sample);
+            this._usageTracker.add(sample.rxDelta, sample.txDelta);
+        });
         this._interfaceMonitor.connect('changed', info => this._onNetworkChanged(info));
         this._interfaceMonitor.start().catch(e =>
             Logger.error('Failed to start network detection:', e));
@@ -42,8 +48,9 @@ export default class NetPulseExtension extends Extension {
     disable() {
         global.disconnectObject(this);
         this._stopMonitoring();
-        this._indicator?.destroy();
-        this._indicator = null;
+        this._destroyIndicator();
+        this._usageTracker?.destroy();
+        this._usageTracker = null;
         this._settings?.destroy();
         this._settings = null;
 
@@ -57,14 +64,30 @@ export default class NetPulseExtension extends Extension {
         this._speedMonitor = null;
     }
 
-    _createIndicator() {
+    _destroyIndicator() {
+        this._dashboard?.destroy();
+        this._dashboard = null;
         this._indicator?.destroy();
+        this._indicator = null;
+    }
+
+    _createIndicator() {
+        this._destroyIndicator();
         this._indicator = new PanelIndicator();
         this._indicator.setOptions(this._settings.display);
         if (this._speedMonitor)
             this._indicator.setSample(this._speedMonitor.current);
         if (this._interfaceMonitor)
             this._indicator.setOnline(isOnline(this._interfaceMonitor.info));
+
+        if (this._speedMonitor && this._interfaceMonitor) {
+            this._dashboard = new PopupDashboard(this._indicator.menu, {
+                speedMonitor: this._speedMonitor,
+                interfaceMonitor: this._interfaceMonitor,
+                usageTracker: this._usageTracker,
+                settings: this._settings,
+            });
+        }
 
         const position = this._settings.panelPosition;
         Main.panel.addToStatusArea(this.uuid, this._indicator, PANEL_SLOTS[position], position);
