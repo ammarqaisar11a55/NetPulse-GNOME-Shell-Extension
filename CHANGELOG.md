@@ -4,6 +4,20 @@ All notable changes to NetPulse are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-10-05
+
+Prepared for extensions.gnome.org; no new features.
+
+### Changed
+
+- All file access from GNOME Shell is asynchronous, so a slow disk can no
+  longer stall the desktop; only the last save when you log out is
+  synchronous.
+- Saving usage data is crash-safe in more situations: if the data folder
+  cannot be written, the existing file is now left untouched.
+- Every signal is disconnected explicitly when the extension is disabled,
+  and enabling/disabling no longer writes to the system journal.
+
 ## [1.0.0] - 2026-10-05
 
 First release, for GNOME Shell 50.

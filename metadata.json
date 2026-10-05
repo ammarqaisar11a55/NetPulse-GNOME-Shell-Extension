@@ -6,5 +6,5 @@
   "url": "https://github.com/ammarqaisar11a55/NetPulse-GNOME-Shell-Extension",
   "settings-schema": "org.gnome.shell.extensions.netpulse",
   "gettext-domain": "netpulse",
-  "version-name": "1.0.0"
+  "version-name": "1.0.1"
 }
