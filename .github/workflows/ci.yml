@@ -40,40 +40,29 @@ jobs:
 
   shell:
     name: GNOME Shell integration tests
-    runs-on: ubuntu-latest
-    container: ubuntu:26.04
+    # A full Ubuntu 26.04 VM (systemd, logind, system bus) like a desktop;
+    # GNOME Shell 50 runs headless inside the tests.
+    runs-on: ubuntu-26.04
     steps:
       - name: Install GNOME Shell and test tools
         run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            ca-certificates git gnome-shell dbus dconf-service dconf-gsettings-backend \
-            at-spi2-core gir1.2-atspi-2.0 python3 python3-gi libgl1-mesa-dri \
-            procps iproute2 zip
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            gnome-shell gnome-shell-common dconf-service dconf-gsettings-backend \
+            at-spi2-core gir1.2-atspi-2.0 python3-gi libgl1-mesa-dri iproute2 zip
+          # The network switching tests use unprivileged network namespaces.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
 
       - uses: actions/checkout@v7
 
-      - name: Prepare a system bus and a test user
-        run: |
-          mkdir -p /run/dbus
-          dbus-daemon --system --fork
-          useradd --create-home tester
-          chown -R tester "$GITHUB_WORKSPACE"
-
       - name: Installer tests
-        run: runuser -u tester -- tests/install/test-install.sh
+        run: tests/install/test-install.sh
 
       - name: Headless GNOME Shell scenarios
-        run: |
-          status=0
-          runuser -u tester -- env HOME=/home/tester tools/test-headless.sh >shell-tests.log 2>&1 || status=$?
-          cat shell-tests.log
-          if [ "$status" -ne 0 ]; then
-            # Surface the failures as annotations on the run.
-            grep -E "FAIL|JS ERROR|JS WARNING|CRITICAL|ERROR \*\*|did not start" shell-tests.log |
-              head -n 10 | sed 's/^/::error::/'
-          fi
-          exit "$status"
+        run: tools/ci-report.sh tools/test-headless.sh
+
+      - name: Network switching scenarios
+        run: NETPULSE_NETNS=1 NETPULSE_TEST_OUTPUT=test-output/netns tools/ci-report.sh tools/test-headless.sh
 
       - name: Keep logs and screenshots
         if: always()
