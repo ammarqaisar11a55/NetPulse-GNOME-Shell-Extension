@@ -6,8 +6,17 @@
 #
 # Usage: tools/test-headless.sh [scenario.sh ...]
 #   Scenarios live in tests/shell/scenarios/; the default runs all of them.
+#   With NETPULSE_NETNS=1 the default is tests/shell/netns/ instead.
 #   Screenshots go to $NETPULSE_TEST_OUTPUT (default: ./test-output).
 set -euo pipefail
+
+# NETPULSE_NETNS=1 runs everything inside a private user + network namespace
+# (no root needed), where scenarios may create and remove interfaces.
+if [[ "${NETPULSE_NETNS:-}" == 1 && -z "${NETPULSE_IN_NETNS:-}" ]]; then
+    exec unshare --user --map-root-user --net --mount \
+        env NETPULSE_IN_NETNS=1 bash -c 'mount -t sysfs sysfs /sys && ip link set lo up && exec "$0" "$@"' \
+        "$0" "$@"
+fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UUID="$(sed -n 's/.*"uuid": *"\([^"]*\)".*/\1/p' "$ROOT/metadata.json")"
@@ -16,6 +25,8 @@ OUTPUT="${NETPULSE_TEST_OUTPUT:-$ROOT/test-output}"
 
 if [[ $# -gt 0 ]]; then
     SCENARIOS=("$@")
+elif [[ -n "${NETPULSE_IN_NETNS:-}" ]]; then
+    SCENARIOS=("$ROOT"/tests/shell/netns/*.sh)
 else
     SCENARIOS=("$ROOT"/tests/shell/scenarios/*.sh)
 fi
@@ -58,7 +69,11 @@ cp "$WORK/session.log" "$OUTPUT/session.log"
 echo "--- NetPulse log lines ---"
 grep -F "[NetPulse]" "$LOG" || true
 echo "--- JS errors ---"
-if grep -E "JS ERROR|JS WARNING|-ERROR \*\*|-CRITICAL \*\*|Error.*$UUID|Extension $UUID" "$LOG"; then
+# Inside the namespace the shell runs as (mapped) root, which logind does
+# not know about; that complaint is expected there.
+NOISE='^$'
+[[ -n "${NETPULSE_IN_NETNS:-}" ]] && NOISE='Could not get a proxy for user 0'
+if grep -E "JS ERROR|JS WARNING|-ERROR \*\*|-CRITICAL \*\*|Error.*$UUID|Extension $UUID" "$LOG" | grep -vE "$NOISE"; then
     exit 1
 fi
 # The preferences app logs through the session bus.

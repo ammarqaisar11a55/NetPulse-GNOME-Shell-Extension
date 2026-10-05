@@ -2,10 +2,13 @@
 //
 // Used when NetworkManager is not running, and as a sanity check when the
 // interface NetworkManager reports does not exist in our network namespace.
-// The kernel offers no change notifications without netlink, so the backend
-// polls; the files involved are tiny and generated in memory.
+// GLib's network monitor (netlink based) signals routing changes, which
+// triggers an immediate refresh; a slow poll catches what it does not report,
+// such as link state changes. The files involved are tiny and in memory.
 
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 
 import {EventEmitter} from '../utils/Signals.js';
 import {readText, readLink, exists} from '../utils/Files.js';
@@ -16,6 +19,8 @@ import {
 } from './InterfaceTypes.js';
 
 const POLL_INTERVAL_MS = 3000;
+// Route changes arrive in bursts; settle before re-reading.
+const SETTLE_DELAY_MS = 200;
 const RTF_UP = 0x1;
 const RTF_REJECT = 0x200;
 const ARPHRD_ETHER = 1;
@@ -279,6 +284,9 @@ export class KernelBackend extends EventEmitter {
         this._options = {...options};
         this._info = makeNetworkInfo();
         this._timerId = 0;
+        this._settleId = 0;
+        this._monitor = null;
+        this._monitorId = 0;
     }
 
     /** @returns {import('./InterfaceTypes.js').NetworkInfo} */
@@ -291,6 +299,22 @@ export class KernelBackend extends EventEmitter {
         this._timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT_IDLE, POLL_INTERVAL_MS, () => {
             this.refresh();
             return GLib.SOURCE_CONTINUE;
+        });
+        try {
+            this._monitor = Gio.NetworkMonitor.get_default();
+            this._monitorId = this._monitor.connect('network-changed', () => this._queueRefresh());
+        } catch (e) {
+            Logger.debug('No network change notifications, polling only:', e.message);
+        }
+    }
+
+    _queueRefresh() {
+        if (this._settleId)
+            return;
+        this._settleId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SETTLE_DELAY_MS, () => {
+            this._settleId = 0;
+            this.refresh();
+            return GLib.SOURCE_REMOVE;
         });
     }
 
@@ -317,10 +341,16 @@ export class KernelBackend extends EventEmitter {
     }
 
     destroy() {
-        if (this._timerId) {
-            GLib.source_remove(this._timerId);
-            this._timerId = 0;
+        for (const id of [this._timerId, this._settleId]) {
+            if (id)
+                GLib.source_remove(id);
         }
+        this._timerId = this._settleId = 0;
+        // The monitor is a process-wide singleton; only drop our handler.
+        if (this._monitorId)
+            GObject.signal_handler_disconnect(this._monitor, this._monitorId);
+        this._monitor = null;
+        this._monitorId = 0;
         this.disconnectAll();
     }
 }

@@ -15,6 +15,7 @@ import * as Logger from '../utils/Logger.js';
 export const MIN_INTERVAL_MS = 500;
 export const MAX_INTERVAL_MS = 10000;
 const HISTORY_LENGTH = 120;
+const PERSISTENT_READ_FAILURES = 5;
 
 // Anything faster than this is a counter glitch, not traffic (400 Gbit/s).
 const MAX_PLAUSIBLE_RATE = 50e9;
@@ -195,17 +196,17 @@ export class SpeedMonitor extends EventEmitter {
     _sample() {
         const counters = readCounters(this._iface, this._sysRoot);
         if (!counters) {
-            // The interface may be going away; detection will catch up.
-            if (this._readFailures++ === 0)
+            // An unplugged interface vanishes a moment before detection
+            // notices; only a lasting failure is worth a warning.
+            if (++this._readFailures === PERSISTENT_READ_FAILURES)
                 Logger.warn(`Cannot read traffic counters of ${this._iface}`);
             this._calculator.reset();
             this._publish(this._zeroSample());
             return;
         }
-        if (this._readFailures > 0) {
+        if (this._readFailures >= PERSISTENT_READ_FAILURES)
             Logger.info(`Traffic counters of ${this._iface} readable again`);
-            this._readFailures = 0;
-        }
+        this._readFailures = 0;
 
         const rates = this._calculator.update(counters.rx, counters.tx, GLib.get_monotonic_time());
         if (rates)

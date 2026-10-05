@@ -25,4 +25,13 @@ else
     status=1
 fi
 
+echo "== Network switching scenarios (private network namespace)"
+if NETPULSE_NETNS=1 NETPULSE_TEST_OUTPUT="$OUTPUT/netns" "$ROOT/tools/test-headless.sh" \
+    >"$OUTPUT/netns.log" 2>&1; then
+    echo "all scenarios passed"
+else
+    grep -E "FAIL|JS ERROR|CRITICAL|ERROR \*\*|FAILED" "$OUTPUT/netns.log"
+    status=1
+fi
+
 exit "$status"
