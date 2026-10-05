@@ -36,11 +36,25 @@ gnome-extensions enable netpulse@ammarqaisar11a55.github.io
 
 ## Development
 
+Run the unit tests (plain `gjs`, no dependencies):
+
+```bash
+gjs -m tests/run.js
+```
+
 Run the extension in an isolated, headless GNOME Shell (your real session
 and settings are untouched) and exercise the enable/disable lifecycle:
 
 ```bash
 tools/test-headless.sh
+```
+
+Watch what NetPulse detects on your machine, and test network switching
+inside a private network namespace (no root needed):
+
+```bash
+gjs -m tests/live/probe-network.js 60
+tests/live/netns-switching.sh
 ```
 
 To watch the logs of your real session:
