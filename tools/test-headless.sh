@@ -38,7 +38,7 @@ glib-compile-schemas "$EXT_DIR/schemas"
 cp -r "$ROOT/tests/shell/helper" "$XDG_DATA_HOME/gnome-shell/extensions/$HELPER_UUID"
 
 LOG="$WORK/shell.log"
-export ROOT UUID HELPER_UUID EXT_DIR LOG OUTPUT
+export ROOT UUID HELPER_UUID EXT_DIR LOG OUTPUT XDG_DATA_HOME
 
 status=0
 dbus-run-session -- bash "$ROOT/tests/shell/session.sh" "${SCENARIOS[@]}" \

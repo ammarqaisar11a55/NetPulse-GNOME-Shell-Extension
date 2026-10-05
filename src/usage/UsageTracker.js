@@ -1,36 +1,253 @@
-// Accumulates transferred bytes reported by the speed monitor.
+// Accounts transferred bytes to the session, hour, day and month, and
+// persists them.
+//
+// Data is saved at most once a minute (and only when it changed), plus on
+// request when the extension stops. Along with the totals, the kernel
+// counters of the last counted sample are stored. On the next start within
+// the same boot, the difference to the current counters is added: this
+// recovers traffic that happened while the extension was disabled (GNOME
+// disables extensions while the screen is locked) or after a crash.
+
+import GLib from 'gi://GLib';
 
 import {EventEmitter} from '../utils/Signals.js';
+import * as Logger from '../utils/Logger.js';
+import {emptyData} from './UsageStorage.js';
+import {dayKey, monthKey, periodTotals, dailySeries, hourlySeries} from './UsageStatistics.js';
+
+export const SAVE_INTERVAL_SECONDS = 60;
+export const DEFAULT_RETENTION_DAYS = 365;
+// Hourly detail is only needed for recent days.
+const HOURLY_RETENTION_DAYS = 7;
+
+/**
+ * @returns {string} identifier of the current boot
+ */
+export function readBootId() {
+    try {
+        const [, bytes] = GLib.file_get_contents('/proc/sys/kernel/random/boot_id');
+        return new TextDecoder().decode(bytes).trim();
+    } catch {
+        return 'unknown';
+    }
+}
 
 export class UsageTracker extends EventEmitter {
-    constructor() {
+    /**
+     * @param {object} options - options
+     * @param {import('./UsageStorage.js').UsageStorage|null} options.storage -
+     *   persistence; null keeps data in memory only
+     * @param {string} options.bootId - identifier of the current boot
+     * @param {string} options.sessionId - identifier of the login session
+     * @param {number} [options.weekStart] - first day of the week (0 = Sunday)
+     * @param {number} [options.retentionDays] - days of history to keep
+     * @param {() => import('gi://GLib').default.DateTime} [options.clock] - time source
+     */
+    constructor({storage, bootId, sessionId, weekStart = 1,
+        retentionDays = DEFAULT_RETENTION_DAYS, clock = () => GLib.DateTime.new_now_local()}) {
         super();
-        this._session = {rx: 0, tx: 0};
+        this._storage = storage;
+        this._bootId = bootId;
+        this._sessionId = sessionId;
+        this._weekStart = weekStart;
+        this._retentionDays = retentionDays;
+        this._clock = clock;
+        this._data = emptyData();
+        this._dirty = false;
+        this._saveTimerId = 0;
     }
 
-    /** @returns {{rx: number, tx: number}} bytes since the session started */
-    get session() {
-        return {...this._session};
+    /** @returns {import('./UsageStorage.js').UsageData} raw data (read only) */
+    get data() {
+        return this._data;
+    }
+
+    /** Loads persisted data; call once before adding traffic. */
+    load() {
+        this._data = this._storage?.load() ?? emptyData();
+        if (this._data.session?.id !== this._sessionId) {
+            this._data.session = {id: this._sessionId, rx: 0, tx: 0};
+            this._dirty = true;
+        }
+        this._prune();
+        // The corrupt file was moved aside; write the recovered data now.
+        if (this._storage?.recovered) {
+            this._dirty = true;
+            this.save();
+        }
+    }
+
+    /**
+     * Adds traffic that happened while we were not running, using the
+     * counters stored with the last save.
+     *
+     * @param {(iface: string) => {rx: number, tx: number}|null} readCounters -
+     *   reads the current kernel counters of an interface
+     * @returns {{rx: number, tx: number}|null} bytes recovered
+     */
+    catchUp(readCounters) {
+        const stored = this._data.counters;
+        if (!stored || stored.bootId !== this._bootId)
+            return null;
+
+        const now = readCounters(stored.iface);
+        if (!now || now.rx < stored.rx || now.tx < stored.tx)
+            return null;
+
+        const recovered = {rx: now.rx - stored.rx, tx: now.tx - stored.tx};
+        this.add(recovered.rx, recovered.tx, {iface: stored.iface, rx: now.rx, tx: now.tx});
+        if (recovered.rx + recovered.tx > 0)
+            Logger.info(`Recovered ${recovered.rx + recovered.tx} bytes of traffic on ${stored.iface}`);
+        return recovered;
     }
 
     /**
      * @param {number} rx - bytes received
      * @param {number} tx - bytes sent
+     * @param {{iface: string, rx: number, tx: number}} [counters] - kernel
+     *   counters after this traffic
      */
-    add(rx, tx) {
-        if (rx <= 0 && tx <= 0)
+    add(rx, tx, counters) {
+        if (counters) {
+            const previous = this._data.counters;
+            this._data.counters = {bootId: this._bootId, ...counters};
+            // An idle interface does not change its counters; only a switch
+            // to another interface needs saving.
+            if (previous?.iface !== counters.iface)
+                this._dirty = true;
+        }
+        if (!(rx > 0) && !(tx > 0))
             return;
-        this._session.rx += rx;
-        this._session.tx += tx;
+
+        const now = this._clock();
+        const key = dayKey(now);
+        const day = this._data.days[key] ??= {rx: 0, tx: 0};
+        day.hrx ??= new Array(24).fill(0);
+        day.htx ??= new Array(24).fill(0);
+        day.rx += rx;
+        day.tx += tx;
+        day.hrx[now.get_hour()] += rx;
+        day.htx[now.get_hour()] += tx;
+
+        const month = this._data.months[monthKey(now)] ??= {rx: 0, tx: 0};
+        month.rx += rx;
+        month.tx += tx;
+
+        this._data.session.rx += rx;
+        this._data.session.tx += tx;
+
+        // Drop expired history once per day.
+        if (this._lastDay !== key) {
+            if (this._lastDay)
+                this._prune();
+            this._lastDay = key;
+        }
+
+        this._dirty = true;
         this.emit('changed');
+    }
+
+    /** @returns {{rx: number, tx: number}} bytes since the session started */
+    get session() {
+        const {rx, tx} = this._data.session ?? {rx: 0, tx: 0};
+        return {rx, tx};
+    }
+
+    /** @returns {{today, yesterday, week, month}} totals, each {rx, tx} */
+    get totals() {
+        return periodTotals(this._data, this._clock(), this._weekStart);
+    }
+
+    /**
+     * @param {number} count - number of days, ending today
+     * @returns {{date: import('gi://GLib').default.DateTime, rx: number, tx: number}[]}
+     */
+    dailySeries(count) {
+        return dailySeries(this._data, this._clock(), count);
+    }
+
+    /** @returns {{hour: number, rx: number, tx: number}[]} today, per hour */
+    hourlySeries() {
+        return hourlySeries(this._data, this._clock());
+    }
+
+    /** @param {number} weekStart - first day of the week (0 = Sunday) */
+    setWeekStart(weekStart) {
+        this._weekStart = weekStart;
+    }
+
+    /** @param {number} days - days of history to keep */
+    setRetentionDays(days) {
+        this._retentionDays = days;
+        this._prune();
     }
 
     resetSession() {
-        this._session = {rx: 0, tx: 0};
+        this._data.session = {id: this._sessionId, rx: 0, tx: 0};
+        this._dirty = true;
         this.emit('changed');
     }
 
+    /** Forgets all history; the counters baseline is kept. */
+    resetAll() {
+        const {counters} = this._data;
+        this._data = emptyData();
+        this._data.counters = counters;
+        this._data.session = {id: this._sessionId, rx: 0, tx: 0};
+        this._dirty = true;
+        this.save();
+        this.emit('changed');
+        Logger.info('Usage statistics reset');
+    }
+
+    _prune() {
+        const now = this._clock();
+        const oldest = dayKey(now.add_days(-(this._retentionDays - 1)));
+        const oldestHourly = dayKey(now.add_days(-(HOURLY_RETENTION_DAYS - 1)));
+        // Months are kept as long as any of their days are.
+        const oldestMonth = oldest.slice(0, 7);
+        for (const key of Object.keys(this._data.days)) {
+            if (key < oldest) {
+                delete this._data.days[key];
+                this._dirty = true;
+            } else if (key < oldestHourly && this._data.days[key].hrx) {
+                delete this._data.days[key].hrx;
+                delete this._data.days[key].htx;
+                this._dirty = true;
+            }
+        }
+        for (const key of Object.keys(this._data.months)) {
+            if (key < oldestMonth) {
+                delete this._data.months[key];
+                this._dirty = true;
+            }
+        }
+    }
+
+    /** Writes pending changes now. */
+    save() {
+        if (!this._dirty || !this._storage)
+            return;
+        if (this._storage.save(this._data, dayKey(this._clock())))
+            this._dirty = false;
+    }
+
+    startAutosave() {
+        if (this._saveTimerId)
+            return;
+        this._saveTimerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, SAVE_INTERVAL_SECONDS, () => {
+            this.save();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    /** Saves pending changes and stops. */
     destroy() {
+        if (this._saveTimerId) {
+            GLib.source_remove(this._saveTimerId);
+            this._saveTimerId = 0;
+        }
+        this.save();
         this.disconnectAll();
     }
 }

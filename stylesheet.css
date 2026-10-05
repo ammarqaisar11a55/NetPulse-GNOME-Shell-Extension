@@ -149,6 +149,28 @@
   padding-bottom: 3px;
 }
 
+/* Usage table */
+.netpulse-usage-header {
+  font-size: 0.8em;
+  font-weight: bold;
+  padding-bottom: 2px;
+}
+
+.netpulse-usage-period,
+.netpulse-usage-number {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.netpulse-usage-number {
+  padding-left: 1.2em;
+  font-feature-settings: "tnum";
+}
+
+.netpulse-usage-total {
+  font-weight: bold;
+}
+
 /* Footer */
 .netpulse-footer {
   spacing: 6px;

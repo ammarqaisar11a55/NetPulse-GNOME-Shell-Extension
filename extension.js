@@ -1,12 +1,16 @@
+import Gio from 'gi://Gio';
+import Shell from 'gi://Shell';
+
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import * as Logger from './src/utils/Logger.js';
 import {InterfaceMonitor} from './src/network/InterfaceMonitor.js';
 import {isOnline} from './src/network/InterfaceTypes.js';
-import {SpeedMonitor} from './src/network/SpeedMonitor.js';
+import {SpeedMonitor, readCounters} from './src/network/SpeedMonitor.js';
 import {SettingsManager} from './src/settings/SettingsManager.js';
-import {UsageTracker} from './src/usage/UsageTracker.js';
+import {UsageTracker, readBootId} from './src/usage/UsageTracker.js';
+import {UsageStorage} from './src/usage/UsageStorage.js';
 import {PanelIndicator} from './src/ui/PanelIndicator.js';
 import {PopupDashboard} from './src/ui/PopupDashboard.js';
 
@@ -24,7 +28,7 @@ export default class NetPulseExtension extends Extension {
             () => this._speedMonitor?.setIntervalMs(this._settings.refreshIntervalMs));
 
         this._interfaceMonitor = new InterfaceMonitor();
-        this._usageTracker = new UsageTracker();
+        this._usageTracker = this._createUsageTracker();
 
         this._createIndicator();
         this._settings.connect('display', () => this._indicator.setOptions(this._settings.display));
@@ -32,15 +36,20 @@ export default class NetPulseExtension extends Extension {
 
         this._speedMonitor.connect('sample', sample => {
             this._indicator.setSample(sample);
-            this._usageTracker.add(sample.rxDelta, sample.txDelta);
+            this._usageTracker.add(sample.rxDelta, sample.txDelta,
+                sample.counters && {iface: sample.iface, ...sample.counters});
         });
         this._interfaceMonitor.connect('changed', info => this._onNetworkChanged(info));
         this._interfaceMonitor.start().catch(e =>
             Logger.error('Failed to start network detection:', e));
 
-        // The shell does not disable extensions when the session ends; stop
-        // monitoring before teardown so no callbacks fire during finalization.
-        global.connectObject('shutdown', () => this._stopMonitoring(), this);
+        // The shell does not disable extensions when the session ends: save
+        // usage and stop monitoring before teardown, so no data is lost and
+        // no callbacks fire during finalization.
+        global.connectObject('shutdown', () => {
+            this._usageTracker.save();
+            this._stopMonitoring();
+        }, this);
 
         Logger.info('Enabled');
     }
@@ -55,6 +64,24 @@ export default class NetPulseExtension extends Extension {
         this._settings = null;
 
         Logger.info('Disabled');
+    }
+
+    _createUsageTracker() {
+        const bootId = readBootId();
+        const tracker = new UsageTracker({
+            storage: new UsageStorage(),
+            bootId,
+            // Survives screen locking (which disables extensions) but not a
+            // new login.
+            sessionId: `${bootId}:${new Gio.Credentials().get_unix_pid()}`,
+            weekStart: Shell.util_get_week_start(),
+        });
+        // Load and catch up before monitoring starts, so no traffic is
+        // counted twice.
+        tracker.load();
+        tracker.catchUp(iface => readCounters(iface));
+        tracker.startAutosave();
+        return tracker;
     }
 
     _stopMonitoring() {

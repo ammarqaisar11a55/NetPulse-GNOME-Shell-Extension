@@ -79,6 +79,9 @@ gsettings --schemadir ~/.local/share/gnome-shell/extensions/netpulse@ammarqaisar
 NetPulse works entirely locally. It makes no network requests, collects no
 personal information and contains no analytics or telemetry.
 
+Usage statistics are stored only on your computer, readable by you alone,
+in `~/.local/share/netpulse/usage.json` (with a daily backup next to it).
+
 ## License
 
 GPL-2.0-or-later. See [LICENSE](LICENSE).

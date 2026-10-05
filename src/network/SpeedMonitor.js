@@ -26,7 +26,21 @@ const MAX_PLAUSIBLE_RATE = 50e9;
  * @property {number} upload - bytes per second sent
  * @property {number} rxDelta - bytes received since the previous sample
  * @property {number} txDelta - bytes sent since the previous sample
+ * @property {{rx: number, tx: number}} [counters] - raw kernel counters
  */
+
+/**
+ * @param {string} iface - interface name
+ * @param {string} [sysRoot] - sysfs network class directory
+ * @returns {{rx: number, tx: number}|null} total bytes received and sent
+ *   since the interface appeared, or null if unavailable
+ */
+export function readCounters(iface, sysRoot = '/sys/class/net') {
+    const dir = `${sysRoot}/${iface}/statistics`;
+    const rx = Number.parseInt(readText(`${dir}/rx_bytes`), 10);
+    const tx = Number.parseInt(readText(`${dir}/tx_bytes`), 10);
+    return Number.isFinite(rx) && Number.isFinite(tx) ? {rx, tx} : null;
+}
 
 /**
  * Turns successive counter readings into rates. Pure and timer-free.
@@ -178,18 +192,8 @@ export class SpeedMonitor extends EventEmitter {
         }
     }
 
-    /**
-     * @returns {{rx: number, tx: number}|null} current counters
-     */
-    _readCounters() {
-        const dir = `${this._sysRoot}/${this._iface}/statistics`;
-        const rx = Number.parseInt(readText(`${dir}/rx_bytes`), 10);
-        const tx = Number.parseInt(readText(`${dir}/tx_bytes`), 10);
-        return Number.isFinite(rx) && Number.isFinite(tx) ? {rx, tx} : null;
-    }
-
     _sample() {
-        const counters = this._readCounters();
+        const counters = readCounters(this._iface, this._sysRoot);
         if (!counters) {
             // The interface may be going away; detection will catch up.
             if (this._readFailures++ === 0)
@@ -205,7 +209,7 @@ export class SpeedMonitor extends EventEmitter {
 
         const rates = this._calculator.update(counters.rx, counters.tx, GLib.get_monotonic_time());
         if (rates)
-            this._publish({iface: this._iface, ...rates});
+            this._publish({iface: this._iface, ...rates, counters});
     }
 
     _publish(sample) {

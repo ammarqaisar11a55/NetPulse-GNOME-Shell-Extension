@@ -12,8 +12,8 @@ import {gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js'
 
 import {StatRow, section, label, DIM_OPACITY} from './Widgets.js';
 import {SpeedDisplay} from './SpeedDisplay.js';
+import {UsageDisplay} from './UsageDisplay.js';
 import {typeLabel, stateLabel, networkIcon} from './Labels.js';
-import {formatBytes} from '../utils/Formatters.js';
 import {ConnectionState} from '../network/InterfaceTypes.js';
 
 const STATE_CLASSES = Object.values(ConnectionState).map(s => `netpulse-status-${s}`);
@@ -89,12 +89,8 @@ export class PopupDashboard {
         this._addBlock(this._speedDisplay);
         this._addSeparator();
 
-        this._sessionRows = {
-            rx: new StatRow(_('Downloaded')),
-            tx: new StatRow(_('Uploaded')),
-            total: new StatRow(_('Total')),
-        };
-        this._addBlock(section(_('Current Session'), Object.values(this._sessionRows)));
+        this._usageDisplay = new UsageDisplay();
+        this._addBlock(section(_('Usage'), [this._usageDisplay]));
         this._addSeparator();
 
         this._networkRows = {
@@ -135,11 +131,8 @@ export class PopupDashboard {
     }
 
     _updateUsage() {
-        const {binary} = this._unitOptions;
-        const {rx, tx} = this._usageTracker.session;
-        this._sessionRows.rx.value = formatBytes(rx, {binary});
-        this._sessionRows.tx.value = formatBytes(tx, {binary});
-        this._sessionRows.total.value = formatBytes(rx + tx, {binary});
+        const totals = {session: this._usageTracker.session, ...this._usageTracker.totals};
+        this._usageDisplay.update(totals, {binary: this._unitOptions.binary});
     }
 
     _updateNetwork() {
