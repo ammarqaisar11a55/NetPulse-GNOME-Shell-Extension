@@ -182,3 +182,15 @@ test('detectKernelNetwork uses Wi-Fi when it is the only route', () => {
     const info = detectKernelNetwork(makeFakeSystem({route: ROUTE_WIFI_ONLY}));
     assertEqual(info.name, 'wlp2s0');
 });
+
+test('detectKernelNetwork describes a manually chosen interface', () => {
+    const roots = makeFakeSystem({ethOperstate: 'down'});
+    const wifi = detectKernelNetwork({...roots, manualInterface: 'wlp2s0'});
+    assertEqual([wifi.name, wifi.type, wifi.state, wifi.source], ['wlp2s0', 'wifi', 'connected', 'manual']);
+
+    const unplugged = detectKernelNetwork({...roots, manualInterface: 'enp3s0'});
+    assertEqual([unplugged.name, unplugged.state], ['enp3s0', 'disconnected'], 'link is down');
+
+    const missing = detectKernelNetwork({...roots, manualInterface: 'eth9'});
+    assertEqual([missing.name, missing.state, missing.source], [null, 'disconnected', 'manual']);
+});

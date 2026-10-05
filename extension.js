@@ -28,7 +28,17 @@ export default class NetPulseExtension extends Extension {
             () => this._speedMonitor?.setIntervalMs(this._settings.refreshIntervalMs));
 
         this._interfaceMonitor = new InterfaceMonitor();
+        this._interfaceMonitor.setManualInterface(this._settings.manualInterface);
+        this._settings.connect('network',
+            () => this._interfaceMonitor?.setManualInterface(this._settings.manualInterface));
+
         this._usageTracker = this._createUsageTracker();
+        this._settings.connect('usage', () => {
+            this._usageTracker.setEnabled(this._settings.usageTracking);
+            this._usageTracker.setRetentionDays(this._settings.retentionDays);
+        });
+        this._settings.connect('reset',
+            () => this._usageTracker.applyResetRequest(this._settings.resetRequest));
 
         this._createIndicator();
         this._settings.connect('display', () => this._indicator.setOptions(this._settings.display));
@@ -75,10 +85,13 @@ export default class NetPulseExtension extends Extension {
             // new login.
             sessionId: `${bootId}:${new Gio.Credentials().get_unix_pid()}`,
             weekStart: Shell.util_get_week_start(),
+            retentionDays: this._settings.retentionDays,
         });
+        tracker.setEnabled(this._settings.usageTracking);
         // Load and catch up before monitoring starts, so no traffic is
         // counted twice.
         tracker.load();
+        tracker.applyResetRequest(this._settings.resetRequest);
         tracker.catchUp(iface => readCounters(iface));
         tracker.startAutosave();
         return tracker;
@@ -113,6 +126,7 @@ export default class NetPulseExtension extends Extension {
                 interfaceMonitor: this._interfaceMonitor,
                 usageTracker: this._usageTracker,
                 settings: this._settings,
+                openPreferences: () => this.openPreferences(),
             });
         }
 

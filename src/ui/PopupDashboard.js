@@ -27,13 +27,15 @@ export class PopupDashboard {
      * @param {import('../network/InterfaceMonitor.js').InterfaceMonitor} sources.interfaceMonitor - network
      * @param {import('../usage/UsageTracker.js').UsageTracker} sources.usageTracker - usage
      * @param {import('../settings/SettingsManager.js').SettingsManager} sources.settings - settings
+     * @param {Function} sources.openPreferences - opens the preferences window
      */
-    constructor(menu, {speedMonitor, interfaceMonitor, usageTracker, settings}) {
+    constructor(menu, {speedMonitor, interfaceMonitor, usageTracker, settings, openPreferences}) {
         this._menu = menu;
         this._speedMonitor = speedMonitor;
         this._interfaceMonitor = interfaceMonitor;
         this._usageTracker = usageTracker;
         this._settings = settings;
+        this._openPreferences = openPreferences;
 
         this._menu.actor.add_style_class_name('netpulse-menu');
         this._build();
@@ -100,7 +102,12 @@ export class PopupDashboard {
         this._addSeparator();
 
         this._usageDisplay = new UsageDisplay();
-        this._addBlock(section(_('Usage'), [this._usageDisplay]));
+        this._usagePaused = label('netpulse-usage-paused', {
+            text: _('Usage tracking is turned off in the preferences.'),
+            opacity: DIM_OPACITY,
+        });
+        this._usagePaused.clutter_text.line_wrap = true;
+        this._addBlock(section(_('Usage'), [this._usagePaused, this._usageDisplay]));
         this._addSeparator();
 
         this._networkRows = {
@@ -126,6 +133,18 @@ export class PopupDashboard {
         });
         resetButton.connect('clicked', () => this._usageTracker.resetSession());
         footer.add_child(resetButton);
+
+        this._settingsButton = new St.Button({
+            style_class: 'icon-button netpulse-footer-button',
+            icon_name: 'emblem-system-symbolic',
+            accessible_name: _('Settings'),
+            can_focus: true,
+        });
+        this._settingsButton.connect('clicked', () => {
+            this._menu.close();
+            this._openPreferences();
+        });
+        footer.add_child(this._settingsButton);
         this._addBlock(footer);
     }
 
@@ -160,6 +179,7 @@ export class PopupDashboard {
     _updateUsage() {
         const totals = {session: this._usageTracker.session, ...this._usageTracker.totals};
         this._usageDisplay.update(totals, {binary: this._unitOptions.binary});
+        this._usagePaused.visible = !this._usageTracker.enabled;
     }
 
     _updateNetwork() {

@@ -9,6 +9,9 @@ const GROUPS = {
     position: ['panel-position'],
     interval: ['refresh-interval'],
     history: ['history-range'],
+    usage: ['usage-tracking', 'usage-retention-days'],
+    reset: ['usage-reset-request'],
+    network: ['manual-interface'],
     debug: ['debug-logging'],
 };
 
@@ -63,6 +66,26 @@ export class SettingsManager extends EventEmitter {
     /** @returns {number} sampling interval in milliseconds */
     get refreshIntervalMs() {
         return this._settings.get_double('refresh-interval') * 1000;
+    }
+
+    /** @returns {boolean} whether new traffic is recorded */
+    get usageTracking() {
+        return this._settings.get_boolean('usage-tracking');
+    }
+
+    /** @returns {number} days of usage history to keep */
+    get retentionDays() {
+        return this._settings.get_uint('usage-retention-days');
+    }
+
+    /** @returns {number} time of the latest reset request (seconds) */
+    get resetRequest() {
+        return this._settings.get_int64('usage-reset-request');
+    }
+
+    /** @returns {string|null} interface chosen by the user, or null for automatic */
+    get manualInterface() {
+        return this._settings.get_string('manual-interface').trim() || null;
     }
 
     /** @returns {boolean} */

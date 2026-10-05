@@ -85,6 +85,31 @@ screenshot_actor() {
     screenshot_area "$1" "$(( $2 > 8 ? $2 - 8 : 0 ))" "$(( $3 > 8 ? $3 - 8 : 0 ))" "$(( $4 + 16 ))" "$(( $5 + 16 ))"
 }
 
+# Clicks at stage coordinates with a virtual pointer. The pointer moves
+# first: a freshly created virtual device drops events sent immediately.
+click() {
+    local device="(() => {
+        const Clutter = imports.gi.Clutter;
+        globalThis._netpulseTestPointer ??= Clutter.get_default_backend().get_default_seat()
+            .create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+        return globalThis._netpulseTestPointer;
+    })()"
+    shell_eval "$device.notify_absolute_motion(imports.gi.GLib.get_monotonic_time(), $1, $2)" >/dev/null
+    sleep 0.3
+    shell_eval "(d => { const C = imports.gi.Clutter, t = imports.gi.GLib.get_monotonic_time();
+        d.notify_button(t, C.BUTTON_PRIMARY, C.ButtonState.PRESSED);
+        d.notify_button(t + 1000, C.BUTTON_PRIMARY, C.ButtonState.RELEASED); })($device)" >/dev/null
+    sleep 0.4
+}
+
+# Prints "x y width height" of the first window whose title matches.
+window_rect() {
+    local r
+    r="$(shell_eval "(w => w ? (r => [r.x, r.y, r.width, r.height].join(' '))(w.get_frame_rect()) : '')(
+        global.display.list_all_windows().find(w => w.title === '$1'))")"
+    echo "${r//\"/}"
+}
+
 # Changes a NetPulse setting: np_set <key> <gvariant-value>
 np_set() {
     gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.netpulse "$1" "$2"

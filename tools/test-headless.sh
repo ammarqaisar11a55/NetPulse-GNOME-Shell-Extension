@@ -26,6 +26,14 @@ done
 WORK="$(mktemp -d -t netpulse-test-XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Never let anything started by the tests reach the user's real session: a
+# private runtime directory makes the real Wayland/X11 sockets unreachable
+# (libwayland falls back to $XDG_RUNTIME_DIR/wayland-0 when WAYLAND_DISPLAY
+# is unset). session.sh points clients at the headless shell instead.
+export XDG_RUNTIME_DIR="$WORK/runtime"
+mkdir -m 0700 "$XDG_RUNTIME_DIR"
+unset DISPLAY WAYLAND_DISPLAY GNOME_KEYRING_CONTROL SSH_AUTH_SOCK
+
 export XDG_DATA_HOME="$WORK/data" XDG_CONFIG_HOME="$WORK/config" \
        XDG_CACHE_HOME="$WORK/cache" XDG_STATE_HOME="$WORK/state"
 EXT_DIR="$XDG_DATA_HOME/gnome-shell/extensions/$UUID"
@@ -43,11 +51,18 @@ export ROOT UUID HELPER_UUID EXT_DIR LOG OUTPUT XDG_DATA_HOME
 status=0
 dbus-run-session -- bash "$ROOT/tests/shell/session.sh" "${SCENARIOS[@]}" \
     2>"$WORK/session.log" || status=$?
+mkdir -p "$OUTPUT"
+cp "$LOG" "$OUTPUT/gnome-shell.log"
+cp "$WORK/session.log" "$OUTPUT/session.log"
 
 echo "--- NetPulse log lines ---"
 grep -F "[NetPulse]" "$LOG" || true
 echo "--- JS errors ---"
 if grep -E "JS ERROR|JS WARNING|-ERROR \*\*|-CRITICAL \*\*|Error.*$UUID|Extension $UUID" "$LOG"; then
+    exit 1
+fi
+# The preferences app logs through the session bus.
+if grep -E "JS ERROR|JS WARNING|$UUID.*(Error|error)" "$WORK/session.log"; then
     exit 1
 fi
 echo "none"

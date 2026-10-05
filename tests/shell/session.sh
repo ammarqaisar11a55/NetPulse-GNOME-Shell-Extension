@@ -11,9 +11,16 @@ gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
 # shellcheck source=tests/shell/lib.sh
 source "$ROOT/tests/shell/lib.sh"
 
+HEADLESS_DISPLAY="wayland-netpulse-$$"
+
+# Apps started by scenarios, directly or through D-Bus activation (such as
+# the extension preferences), open their windows in the headless shell. Set
+# before anything can be activated.
+dbus-update-activation-environment WAYLAND_DISPLAY="$HEADLESS_DISPLAY" GDK_BACKEND=wayland
+
 start_shell() {
-    gnome-shell --headless --wayland --no-x11 --virtual-monitor 1280x800 \
-        --wayland-display "wayland-netpulse-$$" >>"$LOG" 2>&1 &
+    env -u WAYLAND_DISPLAY gnome-shell --headless --wayland --no-x11 --virtual-monitor 1280x800 \
+        --wayland-display "$HEADLESS_DISPLAY" >>"$LOG" 2>&1 &
     SHELL_PID=$!
     if ! gdbus wait --session --timeout 30 org.gnome.Shell; then
         echo "shell did not start"
@@ -37,6 +44,8 @@ restart_shell() {
 }
 
 start_shell
+
+export WAYLAND_DISPLAY="$HEADLESS_DISPLAY" GDK_BACKEND=wayland
 
 for scenario in "$@"; do
     echo "--- scenario: $(basename "$scenario" .sh)"

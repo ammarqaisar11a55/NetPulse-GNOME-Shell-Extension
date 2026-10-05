@@ -226,51 +226,57 @@ function isLinkUp(iface, sysRoot) {
 /**
  * Builds a NetworkInfo from kernel state alone.
  *
- * @param {object} [roots] - overridable filesystem roots, for tests
- * @param {string} [roots.procRoot] - procfs mount point
- * @param {string} [roots.sysRoot] - sysfs network class directory
+ * @param {object} [options] - options
+ * @param {string} [options.procRoot] - procfs mount point (for tests)
+ * @param {string} [options.sysRoot] - sysfs network class directory (for tests)
+ * @param {string|null} [options.manualInterface] - describe this interface
+ *   instead of the one carrying the default route
  * @returns {import('./InterfaceTypes.js').NetworkInfo}
  */
-export function detectKernelNetwork({procRoot = '/proc', sysRoot = '/sys/class/net'} = {}) {
+export function detectKernelNetwork({procRoot = '/proc', sysRoot = '/sys/class/net',
+    manualInterface = null} = {}) {
     const routeText = readText(`${procRoot}/net/route`);
     const route6Text = readText(`${procRoot}/net/ipv6_route`);
+    const source = manualInterface ? 'manual' : 'kernel';
 
     const isTunnel = iface => classifyInterface(iface, sysRoot) === InterfaceType.VPN;
     const usable = iface => hasStatistics(iface, sysRoot) && isLinkUp(iface, sysRoot);
 
-    // Prefer a physical uplink; split-tunnel and policy-routed VPNs keep the
-    // main-table default route on it.
-    let name = findDefaultInterface(routeText, route6Text, i => usable(i) && !isTunnel(i));
-    name ??= findDefaultInterface(routeText, route6Text, usable);
+    let name;
+    if (manualInterface) {
+        name = hasStatistics(manualInterface, sysRoot) ? manualInterface : null;
+    } else {
+        // Prefer a physical uplink; split-tunnel and policy-routed VPNs keep
+        // the main-table default route on it.
+        name = findDefaultInterface(routeText, route6Text, i => usable(i) && !isTunnel(i));
+        name ??= findDefaultInterface(routeText, route6Text, usable);
+    }
 
     const vpnIface = listInterfaces(sysRoot)
         .find(i => i !== name && isTunnel(i) && isLinkUp(i, sysRoot));
+    const vpn = vpnIface ? {name: vpnIface, iface: vpnIface} : null;
 
-    if (!name) {
-        return makeNetworkInfo({
-            source: 'kernel',
-            vpn: vpnIface ? {name: vpnIface, iface: vpnIface} : null,
-        });
-    }
+    if (!name)
+        return makeNetworkInfo({source, vpn});
 
     return makeNetworkInfo({
         name,
         type: classifyInterface(name, sysRoot),
-        state: ConnectionState.CONNECTED,
+        state: isLinkUp(name, sysRoot) ? ConnectionState.CONNECTED : ConnectionState.DISCONNECTED,
         ipv4: findIPv4Address(name, routeText, readText(`${procRoot}/net/fib_trie`)),
         ipv6: findIPv6Address(name, readText(`${procRoot}/net/if_inet6`)),
-        vpn: vpnIface ? {name: vpnIface, iface: vpnIface} : null,
-        source: 'kernel',
+        vpn,
+        source,
     });
 }
 
 export class KernelBackend extends EventEmitter {
     /**
-     * @param {object} [roots] - see detectKernelNetwork()
+     * @param {object} [options] - see detectKernelNetwork()
      */
-    constructor(roots = {}) {
+    constructor(options = {}) {
         super();
-        this._roots = roots;
+        this._options = {...options};
         this._info = makeNetworkInfo();
         this._timerId = 0;
     }
@@ -291,7 +297,7 @@ export class KernelBackend extends EventEmitter {
     refresh() {
         let info;
         try {
-            info = detectKernelNetwork(this._roots);
+            info = detectKernelNetwork(this._options);
         } catch (e) {
             Logger.warn('Kernel network detection failed:', e.message);
             info = makeNetworkInfo();
@@ -300,6 +306,14 @@ export class KernelBackend extends EventEmitter {
             return;
         this._info = info;
         this.emit('changed', info);
+    }
+
+    /** @param {string|null} name - interface to describe, or null for automatic */
+    setManualInterface(name) {
+        if (this._options.manualInterface === name)
+            return;
+        this._options.manualInterface = name;
+        this.refresh();
     }
 
     destroy() {

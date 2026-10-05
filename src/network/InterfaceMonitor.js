@@ -24,7 +24,21 @@ export class InterfaceMonitor extends EventEmitter {
         this._info = makeNetworkInfo();
         this._nm = null;
         this._kernel = null;
+        this._manual = null;
         this._destroyed = false;
+    }
+
+    /**
+     * @param {string|null} name - interface to monitor regardless of routing,
+     *   or null to follow the active connection
+     */
+    setManualInterface(name) {
+        if (name === this._manual)
+            return;
+        this._manual = name;
+        Logger.info(name ? `Monitoring ${name} (chosen in preferences)` : 'Detecting the active interface automatically');
+        this._kernel?.setManualInterface(name);
+        this._update();
     }
 
     /** @returns {import('./InterfaceTypes.js').NetworkInfo} */
@@ -57,7 +71,7 @@ export class InterfaceMonitor extends EventEmitter {
     _ensureKernel() {
         if (this._kernel)
             return;
-        this._kernel = new KernelBackend(this._roots);
+        this._kernel = new KernelBackend({...this._roots, manualInterface: this._manual});
         this._kernel.connect('changed', () => this._update());
         this._kernel.start();
     }
@@ -68,6 +82,18 @@ export class InterfaceMonitor extends EventEmitter {
     }
 
     _resolve() {
+        if (this._manual) {
+            // NetworkManager knows more (connection name, connectivity) when it
+            // manages the chosen interface; otherwise ask the kernel.
+            const info = this._nm?.running ? this._nm.info : null;
+            if (info?.name === this._manual) {
+                this._stopKernel();
+                return {...info, source: 'manual'};
+            }
+            this._ensureKernel();
+            return this._kernel.info;
+        }
+
         if (this._nm?.running) {
             const info = this._nm.info;
             if (!info.name || hasStatistics(info.name, this._roots.sysRoot)) {

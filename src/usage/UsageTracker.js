@@ -55,6 +55,26 @@ export class UsageTracker extends EventEmitter {
         this._data = emptyData();
         this._dirty = false;
         this._saveTimerId = 0;
+        this._enabled = true;
+    }
+
+    /** @returns {boolean} whether new traffic is recorded */
+    get enabled() {
+        return this._enabled;
+    }
+
+    /**
+     * While disabled, traffic is not recorded but the counters baseline keeps
+     * moving, so re-enabling does not count the paused period.
+     *
+     * @param {boolean} enabled - whether to record traffic
+     */
+    setEnabled(enabled) {
+        if (enabled === this._enabled)
+            return;
+        this._enabled = enabled;
+        Logger.info(enabled ? 'Usage tracking resumed' : 'Usage tracking paused');
+        this.emit('changed');
     }
 
     /** @returns {import('./UsageStorage.js').UsageData} raw data (read only) */
@@ -87,7 +107,7 @@ export class UsageTracker extends EventEmitter {
      */
     catchUp(readCounters) {
         const stored = this._data.counters;
-        if (!stored || stored.bootId !== this._bootId)
+        if (!this._enabled || !stored || stored.bootId !== this._bootId)
             return null;
 
         const now = readCounters(stored.iface);
@@ -116,7 +136,7 @@ export class UsageTracker extends EventEmitter {
             if (previous?.iface !== counters.iface)
                 this._dirty = true;
         }
-        if (!(rx > 0) && !(tx > 0))
+        if (!this._enabled || (!(rx > 0) && !(tx > 0)))
             return;
 
         const now = this._clock();
@@ -188,11 +208,28 @@ export class UsageTracker extends EventEmitter {
         this.emit('changed');
     }
 
-    /** Forgets all history; the counters baseline is kept. */
-    resetAll() {
+    /**
+     * Applies a reset requested from the preferences, unless it was applied
+     * already. Requests made while the extension was off are applied on the
+     * next start.
+     *
+     * @param {number} requestedAt - time of the request (seconds)
+     */
+    applyResetRequest(requestedAt) {
+        if (requestedAt > this._data.resetAt)
+            this.resetAll(requestedAt);
+    }
+
+    /**
+     * Forgets all history; the counters baseline is kept.
+     *
+     * @param {number} [requestedAt] - time of the reset request being applied
+     */
+    resetAll(requestedAt = this._data.resetAt) {
         const {counters} = this._data;
         this._data = emptyData();
         this._data.counters = counters;
+        this._data.resetAt = requestedAt;
         this._data.session = {id: this._sessionId, rx: 0, tx: 0};
         this._dirty = true;
         this.save();

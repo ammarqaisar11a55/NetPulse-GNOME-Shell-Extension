@@ -29,11 +29,12 @@ export const DATA_VERSION = 1;
  * @property {{bootId: string, iface: string, rx: number, tx: number}|null} counters -
  *   kernel counters as of the last counted sample, for catching up
  * @property {object} alerts - notification bookkeeping
+ * @property {number} resetAt - time of the last applied reset request (seconds)
  */
 
 /** @returns {UsageData} */
 export function emptyData() {
-    return {version: DATA_VERSION, days: {}, months: {}, session: null, counters: null, alerts: {}};
+    return {version: DATA_VERSION, days: {}, months: {}, session: null, counters: null, alerts: {}, resetAt: 0};
 }
 
 const isBytes = n => Number.isFinite(n) && n >= 0;
@@ -82,6 +83,8 @@ export function sanitize(raw) {
 
     if (typeof raw.alerts === 'object' && raw.alerts !== null && !Array.isArray(raw.alerts))
         data.alerts = {...raw.alerts};
+    if (isBytes(raw.resetAt))
+        data.resetAt = raw.resetAt;
     return data;
 }
 

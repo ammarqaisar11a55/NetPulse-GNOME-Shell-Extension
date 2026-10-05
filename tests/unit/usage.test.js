@@ -272,3 +272,33 @@ test('tracker writes data recovered from the backup back immediately', () => {
     assertEqual(JSON.parse(readFile(`${dir}/usage.json`)).days['2026-10-05'].rx, 42,
         'main file restored without waiting for new traffic');
 });
+
+test('paused tracking records nothing but keeps the counters baseline', () => {
+    const {tracker, dir} = makeTracker();
+    tracker.setEnabled(false);
+    tracker.add(100, 100, {iface: 'wlo1', rx: 5000, tx: 5000});
+    assertEqual(tracker.totals.today, {rx: 0, tx: 0});
+    assertEqual(tracker.data.counters.rx, 5000, 'baseline follows the counters');
+    tracker.destroy();
+
+    const paused = makeTracker({dir}).tracker;
+    paused.setEnabled(false);
+    assertEqual(paused.catchUp(() => ({rx: 9000, tx: 9000})), null, 'no catch-up while paused');
+});
+
+test('reset requests are applied once, also across restarts', () => {
+    const {tracker, dir} = makeTracker();
+    tracker.add(10, 10);
+    tracker.applyResetRequest(1000);
+    assertEqual(tracker.totals.today, {rx: 0, tx: 0});
+    tracker.add(5, 5);
+    tracker.applyResetRequest(1000);
+    assertEqual(tracker.totals.today, {rx: 5, tx: 5}, 'the same request is not applied twice');
+    tracker.destroy();
+
+    const restarted = makeTracker({dir}).tracker;
+    restarted.applyResetRequest(1000);
+    assertEqual(restarted.totals.today, {rx: 5, tx: 5}, 'applied requests are remembered');
+    restarted.applyResetRequest(2000);
+    assertEqual(restarted.totals.today, {rx: 0, tx: 0}, 'a newer request resets');
+});

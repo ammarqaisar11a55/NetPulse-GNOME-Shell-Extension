@@ -64,6 +64,31 @@
       <description>How often, in seconds, network speed is sampled.</description>
     </key>
 
+    <!-- Usage -->
+    <key name="usage-tracking" type="b">
+      <default>true</default>
+      <summary>Track data usage</summary>
+      <description>Record how much data is downloaded and uploaded. When off, existing statistics are kept but nothing new is counted.</description>
+    </key>
+    <key name="usage-retention-days" type="u">
+      <range min="31" max="3650"/>
+      <default>365</default>
+      <summary>Keep usage history for</summary>
+      <description>Number of days of daily usage history to keep.</description>
+    </key>
+    <key name="usage-reset-request" type="x">
+      <default>0</default>
+      <summary>Usage reset request</summary>
+      <description>Set by the preferences dialog to the current time (in seconds since the epoch) to ask the extension to erase all usage statistics.</description>
+    </key>
+
+    <!-- Network -->
+    <key name="manual-interface" type="s">
+      <default>''</default>
+      <summary>Monitored interface</summary>
+      <description>Name of the network interface to monitor, such as "enp3s0". Empty to detect the active interface automatically.</description>
+    </key>
+
     <!-- Popup -->
     <key name="history-range" enum="org.gnome.shell.extensions.netpulse.HistoryRange">
       <default>'today'</default>
