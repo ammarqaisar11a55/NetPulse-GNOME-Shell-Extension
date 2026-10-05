@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit tests and bundle
+    runs-on: ubuntu-latest
+    # The same Ubuntu release (and GJS/GNOME versions) NetPulse targets.
+    container: ubuntu:26.04
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates git gjs gir1.2-nm-1.0 libglib2.0-bin zip
+
+      - uses: actions/checkout@v4
+
+      - name: Validate the settings schema
+        run: glib-compile-schemas --strict --dry-run schemas
+
+      - name: Unit tests
+        run: gjs -m tests/run.js
+
+      - name: Build the extension bundle
+        run: tools/build.sh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-bundle
+          path: dist/*.shell-extension.zip
+
+  shell:
+    name: GNOME Shell integration tests
+    runs-on: ubuntu-latest
+    container: ubuntu:26.04
+    steps:
+      - name: Install GNOME Shell and test tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates git gnome-shell dbus dconf-service dconf-gsettings-backend \
+            at-spi2-core gir1.2-atspi-2.0 python3 python3-gi libgl1-mesa-dri \
+            procps iproute2 zip
+
+      - uses: actions/checkout@v4
+
+      - name: Prepare a system bus and a test user
+        run: |
+          mkdir -p /run/dbus
+          dbus-daemon --system --fork
+          useradd --create-home tester
+          chown -R tester "$GITHUB_WORKSPACE"
+
+      - name: Installer tests
+        run: runuser -u tester -- tests/install/test-install.sh
+
+      - name: Headless GNOME Shell scenarios
+        run: runuser -u tester -- env HOME=/home/tester tools/test-headless.sh
+
+      - name: Keep logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shell-test-output
+          path: test-output/
+          if-no-files-found: ignore
